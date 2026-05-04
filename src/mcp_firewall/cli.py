@@ -18,6 +18,11 @@ from rich.text import Text
 
 from . import __version__
 from .config import Settings, resolve_settings
+from .detectors.llm import OllamaClassifier
+from .detectors.rules import RulesEngine
+from .inspector import Inspector
+from .models import parse_frame
+from .policy import Policy, default_policy
 from .proxy import run_proxy
 from .storage import Storage, stream_events
 
@@ -51,6 +56,17 @@ def main() -> None:
     help="Path to a YAML config file.",
 )
 @click.option(
+    "--detector/--no-detector",
+    default=None,
+    help="Force the detection layer on or off (overrides config file).",
+)
+@click.option(
+    "--policies",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to a YAML policy file (default: built-in policy).",
+)
+@click.option(
     "--verbose",
     "-v",
     count=True,
@@ -60,13 +76,27 @@ def cmd_run(
     server: str,
     db_path: Path | None,
     config: Path | None,
+    detector: bool | None,
+    policies: Path | None,
     verbose: int,
 ) -> None:
     """Run the proxy. The MCP client (e.g. Claude Desktop) invokes this."""
     _setup_logging(verbose)
-    settings = resolve_settings(cli_db_path=db_path, cli_config=config)
+    settings = resolve_settings(
+        cli_db_path=db_path,
+        cli_config=config,
+        cli_detector_enabled=detector,
+        cli_policies=policies,
+    )
     _console.log(f"audit log: {settings.db_path}")
     _console.log(f"server   : {server}")
+    if settings.detector.enabled:
+        _console.log(
+            f"detector : ON (rules={settings.detector.rules_dir}, "
+            f"llm={'on' if settings.detector.llm_enabled else 'off'})"
+        )
+    else:
+        _console.log("detector : off (audit-only mode)")
     try:
         result = asyncio.run(run_proxy(server, settings=settings))
     except KeyboardInterrupt:
@@ -93,6 +123,12 @@ def cmd_run(
 )
 @click.option("--follow", "-f", is_flag=True, help="Stream new events as they arrive.")
 @click.option(
+    "--verdict",
+    type=click.Choice(["PASS", "WARN", "BLOCK"]),
+    default=None,
+    help="Filter to events with this detection verdict.",
+)
+@click.option(
     "--db-path",
     type=click.Path(dir_okay=False, path_type=Path),
     default=None,
@@ -107,6 +143,7 @@ def cmd_run(
 def cmd_logs(
     tail: int,
     follow: bool,
+    verdict: str | None,
     db_path: Path | None,
     config: Path | None,
 ) -> None:
@@ -120,32 +157,178 @@ def cmd_logs(
         sys.exit(1)
     try:
         if follow:
-            asyncio.run(_run_follow(settings, initial_tail=tail))
+            asyncio.run(_run_follow(settings, initial_tail=tail, verdict=verdict))
         else:
-            asyncio.run(_run_tail(settings, tail))
+            asyncio.run(_run_tail(settings, tail, verdict=verdict))
     except KeyboardInterrupt:
         sys.exit(130)
 
 
-async def _run_tail(settings: Settings, tail: int) -> None:
+async def _run_tail(settings: Settings, tail: int, *, verdict: str | None) -> None:
     async with Storage(settings.db_path) as storage:
-        rows = await storage.latest_events(limit=tail)
+        rows = await storage.latest_events(limit=tail, verdict=verdict)
     if not rows:
         _console.print("[dim]no events yet.[/dim]")
         return
     Console().print(_render_table(rows))
 
 
-async def _run_follow(settings: Settings, *, initial_tail: int) -> None:
+async def _run_follow(settings: Settings, *, initial_tail: int, verdict: str | None) -> None:
     out = Console()
     table = _empty_table()
-    rendered = 0
     with Live(table, console=out, refresh_per_second=8, transient=False) as live:
         async with Storage(settings.db_path) as storage:
             async for row in stream_events(storage, initial_tail=initial_tail):
+                if verdict is not None and row["det_verdict"] != verdict:
+                    continue
                 _add_row(table, row)
-                rendered += 1
                 live.update(table)
+
+
+@main.command("detect")
+@click.argument("text", required=True)
+@click.option(
+    "--direction",
+    type=click.Choice(["client_to_server", "server_to_client"]),
+    default="server_to_client",
+    show_default=True,
+    help="Direction to scan with (s2c uses both rules and LLM; c2s rules only).",
+)
+@click.option(
+    "--no-llm",
+    is_flag=True,
+    help="Skip the LLM classifier (rules-only fast path).",
+)
+@click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to a YAML config file.",
+)
+@click.option(
+    "--policies",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to a YAML policy file (default: built-in policy).",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    count=True,
+    help="Increase diagnostic verbosity (-v: INFO, -vv: DEBUG).",
+)
+def cmd_detect(
+    text: str,
+    direction: str,
+    no_llm: bool,
+    config: Path | None,
+    policies: Path | None,
+    verbose: int,
+) -> None:
+    """Run the detection layer over a single string and print the verdict.
+
+    Useful for testing rule packs and policies without spinning up the proxy.
+    The LLM call (if not disabled) goes through the configured Ollama
+    endpoint exactly as it would in a live session, so this also doubles as a
+    quick "is my Ollama set up correctly?" check.
+    """
+    _setup_logging(verbose)
+    settings = resolve_settings(
+        cli_config=config,
+        cli_detector_enabled=True,
+        cli_policies=policies,
+    )
+    try:
+        result = asyncio.run(_run_detect(settings, text=text, direction=direction, no_llm=no_llm))
+    except FileNotFoundError as exc:
+        _console.print(f"[red]error:[/red] {exc}")
+        sys.exit(2)
+    _print_detection_result(result)
+    sys.exit(0 if result.verdict == "PASS" else 1)
+
+
+async def _run_detect(settings: Settings, *, text: str, direction: str, no_llm: bool) -> Any:
+    rules = RulesEngine.from_directory(settings.detector.rules_dir)
+    policy = (
+        Policy.from_file(settings.detector.policies_file)
+        if settings.detector.policies_file is not None
+        else default_policy()
+    )
+
+    storage = Storage(settings.db_path)
+    await storage.open()
+    classifier: OllamaClassifier | None = None
+    try:
+        if not no_llm and settings.detector.llm_enabled:
+            classifier = OllamaClassifier(
+                storage=storage,
+                url=settings.detector.ollama_url,
+                model=settings.detector.ollama_model,
+                timeout_ms=settings.detector.timeout_ms,
+                cache_ttl_s=settings.detector.cache_ttl_s,
+                circuit_threshold=settings.detector.circuit_threshold,
+                circuit_open_s=settings.detector.circuit_open_s,
+            )
+        try:
+            inspector = Inspector(
+                rules=rules,
+                classifier=classifier,
+                policy=policy,
+                max_latency_ms=settings.detector.max_latency_ms,
+                short_circuit_threshold=settings.detector.short_circuit_threshold,
+            )
+            if direction == "server_to_client":
+                wrapped: dict[str, Any] = {
+                    "jsonrpc": "2.0",
+                    "id": 0,
+                    "result": {"content": [{"type": "text", "text": text}]},
+                }
+            else:
+                # Wrap as a tools/call request so policy rules that gate on
+                # method or rules_hit can fire and the inspector has a
+                # JSON-RPC id to bounce back in the synthetic block reply.
+                wrapped = {
+                    "jsonrpc": "2.0",
+                    "id": 0,
+                    "method": "tools/call",
+                    "params": {"name": "shell", "arguments": {"cmd": text}},
+                }
+            raw = json.dumps(wrapped, separators=(",", ":"))
+            parsed, _ = parse_frame(raw)
+            return await inspector.inspect(
+                raw=raw,
+                parsed=parsed,
+                direction=direction,  # type: ignore[arg-type]
+                method_hint=getattr(parsed, "method", None),
+            )
+        finally:
+            if classifier is not None:
+                await classifier.aclose()
+    finally:
+        await storage.close()
+
+
+def _print_detection_result(result: Any) -> None:
+    out = Console()
+    color = {"PASS": "green", "WARN": "yellow", "BLOCK": "red"}.get(result.verdict, "white")
+    out.print(
+        f"[bold {color}]{result.verdict}[/bold {color}] "
+        f"(score={result.score:.2f}, latency={result.latency_ms} ms)"
+    )
+    if result.rules_hit:
+        out.print("rules hit:")
+        for rid in result.rules_hit:
+            out.print(f"  • [cyan]{rid}[/cyan]")
+    else:
+        out.print("rules: [dim]no hit[/dim]")
+    classifier_str = (
+        f"[bold]{result.classifier}[/bold]" if result.classifier else "[dim]skipped[/dim]"
+    )
+    out.print(f"classifier: {classifier_str} ([dim]{result.note or 'ok'}[/dim])")
+    if result.matched_policy:
+        out.print(f"policy: [yellow]{result.matched_policy}[/yellow] → {result.action}")
+    else:
+        out.print(f"policy: [dim]no match[/dim] → {result.action}")
 
 
 def _setup_logging(verbose: int) -> None:
@@ -167,6 +350,7 @@ def _empty_table() -> Table:
     table.add_column("ts", style="dim", no_wrap=True)
     table.add_column("dir", justify="center", no_wrap=True)
     table.add_column("kind", no_wrap=True)
+    table.add_column("verdict", justify="center", no_wrap=True)
     table.add_column("method", style="cyan", no_wrap=True)
     table.add_column("msg_id", style="dim", no_wrap=True)
     table.add_column("payload", overflow="ellipsis", no_wrap=True)
@@ -195,16 +379,31 @@ _KIND_STYLE = {
 }
 
 
+_VERDICT_STYLE = {
+    "PASS": "green",
+    "WARN": "yellow",
+    "BLOCK": "bold red",
+}
+
+
 def _add_row(table: Table, row: aiosqlite.Row) -> None:
     table.add_row(
         str(row["id"]),
         _short_ts(row["ts"]),
         _DIRECTION_ARROW.get(row["direction"], Text("?")),
         Text(row["kind"], style=_KIND_STYLE.get(row["kind"], "white")),
+        _verdict_cell(row),
         row["method"] or "",
         row["msg_id"] or "",
         _payload_summary(row),
     )
+
+
+def _verdict_cell(row: aiosqlite.Row) -> Text:
+    verdict = row["det_verdict"]
+    if not verdict:
+        return Text("—", style="dim")
+    return Text(verdict, style=_VERDICT_STYLE.get(verdict, "white"))
 
 
 def _short_ts(ts: str) -> str:
