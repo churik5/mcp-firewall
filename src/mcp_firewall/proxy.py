@@ -8,6 +8,18 @@ See ADR-0001. The shape is intentionally small:
   for asynchronous, batched persistence.
 - We never write our own diagnostics to stdout — that channel belongs to
   the JSON-RPC frames flowing to the client.
+
+I/O abstraction
+---------------
+
+In production the proxy is launched by Claude Desktop, so stdin/stdout are
+anonymous pipes — :func:`asyncio.AbstractEventLoop.connect_read_pipe` and
+``connect_write_pipe`` accept those happily. When the proxy is launched from
+a normal shell or under test runners, those fds may be a tty or a regular
+file, which the asyncio pipe transports refuse with ``ValueError``. We fall
+back to blocking I/O on a worker thread, exposed through the same async
+:class:`_LineReader` / :class:`_LineWriter` interface so the pump code stays
+unchanged.
 """
 
 from __future__ import annotations
@@ -20,7 +32,7 @@ import signal
 import sys
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Literal, cast
+from typing import IO, Literal, Protocol, cast
 
 from .config import Settings
 from .models import EventRecord, parse_frame, split_batch
@@ -37,6 +49,28 @@ DEFAULT_LINE_LIMIT_BYTES = 8 * 1024 * 1024  # 8 MiB — generous for tool result
 class ProxyResult:
     exit_code: int
     events_dropped: int
+
+
+class _LineReader(Protocol):
+    async def readline(self) -> bytes: ...
+    def close(self) -> None: ...
+
+
+class _LineWriter(Protocol):
+    async def write_line(self, data: bytes) -> bool:
+        """Write ``data`` and flush. Returns ``False`` once the peer is gone."""
+        ...
+
+    def close(self) -> None: ...
+    async def aclose(self) -> None:
+        """Close and wait for the underlying transport to actually shut.
+
+        Implementations that wrap :class:`asyncio.StreamWriter` need this so
+        the peer sees EOF promptly; for blocking writers it is a no-op.
+        """
+        ...
+
+    def is_closing(self) -> bool: ...
 
 
 async def run_proxy(
@@ -69,8 +103,10 @@ async def run_proxy(
 
         await _patch_session_with_server_pid(storage, session_id, child.pid)
 
-        client_reader = await _connect_stdin(line_limit)
-        client_writer = await _connect_stdout()
+        client_reader = await _open_client_reader(line_limit)
+        client_writer = await _open_client_writer()
+        server_reader = _AsyncStreamReader(child.stdout)
+        server_writer = _AsyncStreamWriter(child.stdin)
 
         async with EventBuffer(
             storage,
@@ -84,7 +120,7 @@ async def run_proxy(
             client_to_server = asyncio.create_task(
                 _pump(
                     src=client_reader,
-                    dst=child.stdin,
+                    dst=server_writer,
                     direction="client_to_server",
                     buffer=buffer,
                     session_id=session_id,
@@ -94,7 +130,7 @@ async def run_proxy(
             )
             server_to_client = asyncio.create_task(
                 _pump(
-                    src=child.stdout,
+                    src=server_reader,
                     dst=client_writer,
                     direction="server_to_client",
                     buffer=buffer,
@@ -105,26 +141,46 @@ async def run_proxy(
             )
             stop_waiter = asyncio.create_task(stop_event.wait(), name="stop-waiter")
 
-            done, pending = await asyncio.wait(
+            done, _ = await asyncio.wait(
                 {client_to_server, server_to_client, stop_waiter},
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
             for task in done:
+                if task is stop_waiter:
+                    continue
                 exc = task.exception()
                 if exc is not None and not isinstance(exc, asyncio.CancelledError):
                     logger.error("pump task %s failed: %r", task.get_name(), exc)
 
-            stop_event.set()
-            for task in pending:
-                task.cancel()
+            if stop_waiter in done:
+                # Forced shutdown — kill both directions immediately.
+                for task in (client_to_server, server_to_client):
+                    task.cancel()
+            elif client_to_server in done and server_to_client not in done:
+                # Client EOF. Half-close server stdin (await wait_closed so the
+                # peer actually sees EOF) and let the server drain any pending
+                # replies before we tear down s2c.
+                await server_writer.aclose()
+                try:
+                    await asyncio.wait_for(server_to_client, timeout=10.0)
+                except TimeoutError:
+                    logger.warning("server did not flush within 10s; cancelling")
+                    server_to_client.cancel()
+            elif server_to_client in done and client_to_server not in done:
+                # Server EOF / crash. Stop reading from client.
+                client_to_server.cancel()
+
+            # stop_waiter may still be pending — always cancel before awaiting
+            # so we never block the shutdown path on an idle event.
+            stop_waiter.cancel()
+            for task in (client_to_server, server_to_client, stop_waiter):
                 with suppress(asyncio.CancelledError, Exception):
                     await task
 
             with suppress(ProcessLookupError):
                 if child.returncode is None:
-                    if child.stdin is not None and not child.stdin.is_closing():
-                        child.stdin.close()
+                    await server_writer.aclose()
                     try:
                         await asyncio.wait_for(child.wait(), timeout=2.0)
                     except TimeoutError:
@@ -146,26 +202,20 @@ async def run_proxy(
 
 async def _pump(
     *,
-    src: asyncio.StreamReader,
-    dst: asyncio.StreamWriter,
-    direction: str,
+    src: _LineReader,
+    dst: _LineWriter,
+    direction: Direction,
     buffer: EventBuffer,
     session_id: int,
     stop_event: asyncio.Event,
 ) -> None:
-    """Copy newline-delimited frames from ``src`` to ``dst``, logging each one.
-
-    direction is "client_to_server" or "server_to_client" — we trust the
-    caller, the EventRecord layer normalises.
-    """
+    """Copy newline-delimited frames from ``src`` to ``dst``, logging each one."""
     try:
         while not stop_event.is_set():
             try:
                 line = await src.readline()
             except asyncio.LimitOverrunError as exc:
-                # Frame larger than our limit. Drain it as raw without parsing
-                # so we still forward the bytes; otherwise the protocol stalls.
-                consumed = await src.readexactly(exc.consumed)
+                consumed = await _drain_oversized(src, exc.consumed)
                 _record_raw(
                     buffer,
                     session_id=session_id,
@@ -173,7 +223,8 @@ async def _pump(
                     raw=consumed.decode("utf-8", errors="replace"),
                     note="line_limit_exceeded",
                 )
-                _safe_write(dst, consumed)
+                if not await dst.write_line(consumed):
+                    return
                 continue
             except (ConnectionResetError, BrokenPipeError):
                 return
@@ -181,10 +232,7 @@ async def _pump(
             if not line:
                 return  # EOF
 
-            _safe_write(dst, line)
-            try:
-                await dst.drain()
-            except (ConnectionResetError, BrokenPipeError):
+            if not await dst.write_line(line):
                 return
 
             decoded = line.decode("utf-8", errors="replace").rstrip("\r\n")
@@ -201,27 +249,34 @@ async def _pump(
             dst.close()
 
 
-def _safe_write(dst: asyncio.StreamWriter, data: bytes) -> None:
-    try:
-        dst.write(data)
-    except (ConnectionResetError, BrokenPipeError):
-        return
+async def _drain_oversized(src: _LineReader, consumed: int) -> bytes:
+    """Best-effort drain of an oversized frame.
+
+    Only the asyncio reader exposes ``readexactly``; the blocking fallback
+    already returned the partial bytes inside ``LimitOverrunError`` is not
+    reachable on that path. We probe via ``getattr`` and degrade gracefully.
+    """
+    readexactly = getattr(src, "_readexactly", None)
+    if readexactly is not None:
+        try:
+            return cast(bytes, await readexactly(consumed))
+        except Exception as exc:
+            logger.debug("oversized drain failed: %r", exc)
+    return b""
 
 
 def _log_frame(
     buffer: EventBuffer,
     *,
     session_id: int,
-    direction: str,
+    direction: Direction,
     raw: str,
 ) -> None:
-    members = split_batch(raw)
-    direction_lit = _direction_lit(direction)
-    for member in members:
+    for member in split_batch(raw):
         parsed, kind = parse_frame(member)
         record = EventRecord.from_parsed(
             session_id=session_id,
-            direction=direction_lit,
+            direction=direction,
             parsed=parsed,
             kind=kind,
             raw=member,
@@ -233,14 +288,13 @@ def _record_raw(
     buffer: EventBuffer,
     *,
     session_id: int,
-    direction: str,
+    direction: Direction,
     raw: str,
     note: str,
 ) -> None:
-    direction_lit = _direction_lit(direction)
     record = EventRecord(
         session_id=session_id,
-        direction=direction_lit,
+        direction=direction,
         kind="raw",
         raw=raw,
         note=note,
@@ -248,34 +302,138 @@ def _record_raw(
     buffer.record(record)
 
 
-def _direction_lit(direction: str) -> Direction:
-    if direction in ("client_to_server", "server_to_client"):
-        return cast(Direction, direction)
-    raise ValueError(f"unknown direction {direction!r}")
+# --------------------------------------------------------------------------
+# I/O adapters
+# --------------------------------------------------------------------------
 
 
-async def _connect_stdin(limit: int) -> asyncio.StreamReader:
+class _AsyncStreamReader:
+    """Wraps :class:`asyncio.StreamReader` as a :class:`_LineReader`."""
+
+    def __init__(self, reader: asyncio.StreamReader) -> None:
+        self._reader = reader
+
+    async def readline(self) -> bytes:
+        return await self._reader.readline()
+
+    async def _readexactly(self, n: int) -> bytes:
+        return await self._reader.readexactly(n)
+
+    def close(self) -> None:  # readers don't need explicit close
+        return
+
+
+class _AsyncStreamWriter:
+    """Wraps :class:`asyncio.StreamWriter` as a :class:`_LineWriter`."""
+
+    def __init__(self, writer: asyncio.StreamWriter) -> None:
+        self._writer = writer
+
+    async def write_line(self, data: bytes) -> bool:
+        try:
+            self._writer.write(data)
+            await self._writer.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            return False
+        return True
+
+    def close(self) -> None:
+        if not self._writer.is_closing():
+            self._writer.close()
+
+    async def aclose(self) -> None:
+        self.close()
+        with suppress(ConnectionResetError, BrokenPipeError, Exception):
+            await self._writer.wait_closed()
+
+    def is_closing(self) -> bool:
+        return self._writer.is_closing()
+
+
+class _BlockingReader:
+    """Fallback: blocking line reader on a worker thread."""
+
+    def __init__(self, fileobj: IO[bytes]) -> None:
+        self._fileobj = fileobj
+        self._closed = False
+
+    async def readline(self) -> bytes:
+        if self._closed:
+            return b""
+        return await asyncio.to_thread(self._fileobj.readline)
+
+    def close(self) -> None:
+        self._closed = True
+
+
+class _BlockingWriter:
+    """Fallback: blocking line writer on a worker thread.
+
+    We deliberately do **not** close the underlying file object on
+    :meth:`close` — that would close real ``sys.stdout`` or ``sys.stderr``
+    and break everything else in the process. We just flip a flag.
+    """
+
+    def __init__(self, fileobj: IO[bytes]) -> None:
+        self._fileobj = fileobj
+        self._closed = False
+        self._lock = asyncio.Lock()
+
+    async def write_line(self, data: bytes) -> bool:
+        if self._closed:
+            return False
+        async with self._lock:
+            try:
+                await asyncio.to_thread(self._sync_write, data)
+            except (ConnectionResetError, BrokenPipeError):
+                self._closed = True
+                return False
+        return True
+
+    def _sync_write(self, data: bytes) -> None:
+        self._fileobj.write(data)
+        self._fileobj.flush()
+
+    def close(self) -> None:
+        self._closed = True
+
+    async def aclose(self) -> None:
+        self._closed = True
+
+    def is_closing(self) -> bool:
+        return self._closed
+
+
+async def _open_client_reader(limit: int) -> _LineReader:
     loop = asyncio.get_running_loop()
-    reader = asyncio.StreamReader(limit=limit, loop=loop)
-    protocol = asyncio.StreamReaderProtocol(reader, loop=loop)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin.buffer)
-    return reader
+    try:
+        reader = asyncio.StreamReader(limit=limit, loop=loop)
+        protocol = asyncio.StreamReaderProtocol(reader, loop=loop)
+        await loop.connect_read_pipe(lambda: protocol, sys.stdin.buffer)
+        return _AsyncStreamReader(reader)
+    except (ValueError, OSError, NotImplementedError) as exc:
+        logger.debug("falling back to blocking stdin reader: %r", exc)
+        return _BlockingReader(sys.stdin.buffer)
 
 
-async def _connect_stdout() -> asyncio.StreamWriter:
+async def _open_client_writer() -> _LineWriter:
     loop = asyncio.get_running_loop()
-    transport, protocol = await loop.connect_write_pipe(
-        lambda: asyncio.streams.FlowControlMixin(loop=loop),
-        sys.stdout.buffer,
-    )
-    return asyncio.StreamWriter(transport, protocol, None, loop)
+    try:
+        transport, protocol = await loop.connect_write_pipe(
+            lambda: asyncio.streams.FlowControlMixin(loop=loop),
+            sys.stdout.buffer,
+        )
+        sw = asyncio.StreamWriter(transport, protocol, None, loop)
+        return _AsyncStreamWriter(sw)
+    except (ValueError, OSError, NotImplementedError) as exc:
+        logger.debug("falling back to blocking stdout writer: %r", exc)
+        return _BlockingWriter(sys.stdout.buffer)
 
 
 def _install_signal_handlers(stop_event: asyncio.Event) -> None:
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         with suppress(NotImplementedError, RuntimeError):
-            # NotImplementedError on Windows; RuntimeError if not in main thread.
             loop.add_signal_handler(sig, stop_event.set)
 
 
