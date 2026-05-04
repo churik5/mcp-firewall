@@ -9,11 +9,20 @@ Two layers:
   :class:`Storage` in batches. The proxy calls :meth:`record` and never
   awaits a database write directly, so DB latency cannot back-pressure
   JSON-RPC traffic (ADR-0002).
+
+Schema versioning
+-----------------
+
+``schema_version`` is a write-once log: every time we successfully reach
+a new schema, we ``INSERT OR IGNORE`` a row with that version. The current
+version is ``MAX(version)``. ADR-0004 lifts this to v2 by adding the
+``det_*`` columns and a ``classifier_cache`` table.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -28,7 +37,7 @@ from .models import EventRecord
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _PRAGMAS = (
     "PRAGMA journal_mode = WAL",
@@ -36,7 +45,8 @@ _PRAGMAS = (
     "PRAGMA foreign_keys = ON",
 )
 
-_DDL = """
+# Base DDL = a fresh v1 schema. Migrations below upgrade it to current.
+_BASE_DDL = """
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
@@ -73,6 +83,30 @@ CREATE INDEX IF NOT EXISTS idx_events_method      ON events(method) WHERE method
 CREATE INDEX IF NOT EXISTS idx_events_kind        ON events(kind);
 """
 
+# target_version -> ordered DDL to bring a DB from the previous version up.
+# Statements are run sequentially in a transaction; ``ALTER TABLE ADD COLUMN``
+# duplicates are tolerated to make re-open after a crashed migration safe.
+_MIGRATIONS: dict[int, tuple[str, ...]] = {
+    2: (
+        "ALTER TABLE events ADD COLUMN det_verdict TEXT",
+        "ALTER TABLE events ADD COLUMN det_score REAL",
+        "ALTER TABLE events ADD COLUMN det_rules TEXT",
+        "ALTER TABLE events ADD COLUMN det_classifier TEXT",
+        "ALTER TABLE events ADD COLUMN det_latency_ms INTEGER",
+        "ALTER TABLE events ADD COLUMN det_action TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_events_verdict "
+        "ON events(det_verdict) WHERE det_verdict IS NOT NULL",
+        """CREATE TABLE IF NOT EXISTS classifier_cache (
+            content_hash  TEXT PRIMARY KEY,
+            classifier    TEXT NOT NULL,
+            score         REAL NOT NULL,
+            cached_at     TEXT NOT NULL,
+            backend       TEXT NOT NULL DEFAULT 'ollama'
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_classifier_cache_cached_at ON classifier_cache(cached_at)",
+    ),
+}
+
 
 class Storage:
     """Repository for the audit log. Always open with ``async with``."""
@@ -105,13 +139,62 @@ class Storage:
         conn.row_factory = aiosqlite.Row
         for pragma in _PRAGMAS:
             await conn.execute(pragma)
-        await conn.executescript(_DDL)
-        await conn.execute(
-            "INSERT OR IGNORE INTO schema_version(version) VALUES (?)",
-            (SCHEMA_VERSION,),
-        )
+        await conn.executescript(_BASE_DDL)
+        # If schema_version is empty, this is a brand-new DB — record v1 so
+        # the migration loop can climb from there. We never INSERT directly
+        # at SCHEMA_VERSION here; migrations stamp their own target version.
+        await conn.execute("INSERT OR IGNORE INTO schema_version(version) VALUES (1)")
         await conn.commit()
         self._conn = conn
+        await self._run_migrations()
+
+    async def _current_schema_version(self) -> int:
+        conn = self._required_conn
+        cur = await conn.execute("SELECT MAX(version) AS v FROM schema_version")
+        row = await cur.fetchone()
+        if row is None or row["v"] is None:
+            return 0
+        return int(row["v"])
+
+    async def _run_migrations(self) -> None:
+        """Apply pending migrations from ``current+1`` up to ``SCHEMA_VERSION``.
+
+        Each migration is wrapped in an explicit transaction so that a
+        crash mid-way leaves ``schema_version`` un-bumped — the next open
+        will retry from the same starting point. Within a migration, an
+        ``ALTER TABLE ADD COLUMN`` whose column already exists (only
+        possible after a partial earlier run) is tolerated, which keeps
+        the procedure idempotent.
+        """
+        conn = self._required_conn
+        for target in sorted(_MIGRATIONS):
+            if target <= await self._current_schema_version():
+                continue
+            statements = _MIGRATIONS[target]
+            logger.info("storage: migrating to schema v%d", target)
+            # BEGIN IMMEDIATE acquires the writer lock up front so two
+            # concurrently-launching proxies cannot both attempt the same
+            # migration. Without it, the second writer races on the
+            # ``INSERT INTO schema_version`` and may exit the loop early
+            # while the first commit is still in flight.
+            await conn.execute("BEGIN IMMEDIATE")
+            try:
+                for stmt in statements:
+                    try:
+                        await conn.execute(stmt)
+                    except aiosqlite.OperationalError as exc:
+                        msg = str(exc).lower()
+                        if "duplicate column name" in msg:
+                            continue
+                        raise
+                await conn.execute(
+                    "INSERT OR IGNORE INTO schema_version(version) VALUES (?)",
+                    (target,),
+                )
+                await conn.commit()
+            except Exception:
+                await conn.rollback()
+                raise
 
     async def close(self) -> None:
         if self._conn is None:
@@ -174,8 +257,10 @@ class Storage:
             """
             INSERT INTO events (
                 session_id, ts, direction, kind, msg_id, method,
-                params_json, result_json, error_json, raw, note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                params_json, result_json, error_json, raw, note,
+                det_verdict, det_score, det_rules, det_classifier,
+                det_latency_ms, det_action
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -190,6 +275,12 @@ class Storage:
                     e.error_json,
                     e.raw,
                     e.note,
+                    e.det_verdict,
+                    e.det_score,
+                    json.dumps(e.det_rules) if e.det_rules is not None else None,
+                    e.det_classifier,
+                    e.det_latency_ms,
+                    e.det_action,
                 )
                 for e in events
             ],
@@ -201,25 +292,40 @@ class Storage:
         *,
         limit: int,
         since_id: int | None = None,
+        verdict: str | None = None,
     ) -> list[aiosqlite.Row]:
         """Return the most recent ``limit`` events newer than ``since_id``.
 
         Used by ``logs --tail`` (since_id=None) and ``logs --follow``
-        (since_id=last seen).
+        (since_id=last seen). The optional ``verdict`` filter restricts
+        to rows whose ``det_verdict`` equals the given label — used by
+        ``logs --verdict block`` (ADR-0004).
         """
         conn = self._required_conn
         if since_id is None:
-            cur = await conn.execute(
-                "SELECT * FROM events ORDER BY id DESC LIMIT ?",
-                (limit,),
-            )
+            if verdict is None:
+                cur = await conn.execute(
+                    "SELECT * FROM events ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                )
+            else:
+                cur = await conn.execute(
+                    "SELECT * FROM events WHERE det_verdict = ? ORDER BY id DESC LIMIT ?",
+                    (verdict, limit),
+                )
             rows = list(await cur.fetchall())
             return list(reversed(rows))
 
-        cur = await conn.execute(
-            "SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT ?",
-            (since_id, limit),
-        )
+        if verdict is None:
+            cur = await conn.execute(
+                "SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT ?",
+                (since_id, limit),
+            )
+        else:
+            cur = await conn.execute(
+                "SELECT * FROM events WHERE id > ? AND det_verdict = ? ORDER BY id ASC LIMIT ?",
+                (since_id, verdict, limit),
+            )
         return list(await cur.fetchall())
 
     async def event_count(self) -> int:
@@ -227,6 +333,60 @@ class Storage:
         cur = await conn.execute("SELECT COUNT(*) AS n FROM events")
         row = await cur.fetchone()
         return int(row["n"]) if row is not None else 0
+
+    # ------------------------------------------------------------------
+    # Classifier cache (ADR-0004 §4)
+    # ------------------------------------------------------------------
+
+    async def lookup_classifier_cache(
+        self,
+        *,
+        content_hash: str,
+        ttl_s: int,
+    ) -> tuple[str, float] | None:
+        """Return ``(classifier, score)`` if a fresh entry exists, else ``None``.
+
+        An entry is "fresh" when ``cached_at`` is within ``ttl_s`` seconds
+        of *now*. Stale entries are not deleted here — the v0.3 vacuum
+        command will sweep them; for v0.2 they only waste a small amount
+        of disk.
+        """
+        conn = self._required_conn
+        cur = await conn.execute(
+            "SELECT classifier, score, cached_at FROM classifier_cache WHERE content_hash = ?",
+            (content_hash,),
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        cached_at = datetime.fromisoformat(row["cached_at"])
+        age = (datetime.now(UTC) - cached_at).total_seconds()
+        if age > ttl_s:
+            return None
+        return str(row["classifier"]), float(row["score"])
+
+    async def upsert_classifier_cache(
+        self,
+        *,
+        content_hash: str,
+        classifier: str,
+        score: float,
+        backend: str = "ollama",
+    ) -> None:
+        conn = self._required_conn
+        await conn.execute(
+            "INSERT OR REPLACE INTO classifier_cache "
+            "(content_hash, classifier, score, cached_at, backend) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                content_hash,
+                classifier,
+                score,
+                datetime.now(UTC).isoformat(),
+                backend,
+            ),
+        )
+        await conn.commit()
 
 
 class EventBuffer:

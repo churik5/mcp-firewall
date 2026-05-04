@@ -117,8 +117,18 @@ def _from_dict(payload: dict[str, Any]) -> tuple[ParsedMessage | None, str]:
     return None, "parse_error"
 
 
+DetectionVerdict = Literal["PASS", "WARN", "BLOCK"]
+DetectionAction = Literal["allow", "warn", "block", "rewrite"]
+ClassifierLabel = Literal["DATA", "INSTRUCTION"]
+
+
 class EventRecord(BaseModel):
-    """One row of the ``events`` table. Internal — not over the wire."""
+    """One row of the ``events`` table. Internal — not over the wire.
+
+    The ``det_*`` fields are populated by the inspector (ADR-0004); they
+    are all optional and default to ``None`` so a Week 1 caller (no
+    detector) builds an event with the original shape.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -133,6 +143,13 @@ class EventRecord(BaseModel):
     error_json: str | None = None
     raw: str
     note: str | None = None
+    # ADR-0004 detection columns (schema v2). All NULL when the detector is off.
+    det_verdict: DetectionVerdict | None = None
+    det_score: float | None = None
+    det_rules: list[str] | None = None
+    det_classifier: ClassifierLabel | None = None
+    det_latency_ms: int | None = None
+    det_action: DetectionAction | None = None
 
     @classmethod
     def from_parsed(
