@@ -4,12 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-firewall"
-version = "0.3.0"
+version = "0.4.0"
 description = "Prompt-injection firewall and audit log for Model Context Protocol (MCP) servers"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "Aleksandr Churilov" }]
+maintainers = [{ name = "Aleksandr Churilov", email = "churik0509@gmail.com" }]
 keywords = [
     "mcp",
     "model-context-protocol",
@@ -19,20 +20,31 @@ keywords = [
     "ai-safety",
     "claude",
     "anthropic",
+    "ollama",
+    "audit-log",
+    "stdio-proxy",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
+    "Framework :: AsyncIO",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Operating System :: OS Independent",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Security",
     "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Logging",
     "Topic :: System :: Monitoring",
+    "Typing :: Typed",
 ]
 
 dependencies = [
@@ -58,9 +70,13 @@ dev = [
 mcp-firewall = "mcp_firewall.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/churik/mcp-firewall"
-Repository = "https://github.com/churik/mcp-firewall"
-Issues = "https://github.com/churik/mcp-firewall/issues"
+Homepage = "https://github.com/churik5/mcp-firewall"
+Repository = "https://github.com/churik5/mcp-firewall"
+Issues = "https://github.com/churik5/mcp-firewall/issues"
+Changelog = "https://github.com/churik5/mcp-firewall/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/churik5/mcp-firewall/blob/main/README.md"
+"Release notes" = "https://github.com/churik5/mcp-firewall/releases"
+"Security policy" = "https://github.com/churik5/mcp-firewall/security/policy"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_firewall"]

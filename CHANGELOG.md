@@ -6,6 +6,80 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-05
+
+### Added
+
+- **`mcp-firewall doctor`** — environment diagnostic with four checks
+  (Python version, Ollama reachable + model loaded, audit DB writable
+  at schema v2, rules + policy validate). Exit code reflects worst
+  status: 0 = pass, 1 = warn, 2 = fail.
+- **`mcp-firewall benchmark`** — three workloads (rules detector,
+  inspector cache hit, end-to-end via cat) with p50/p95/p99 output.
+- **GitHub Actions workflows for the launch:**
+  - `publish.yml` — PyPI OIDC trusted publishing on tag.
+  - `test-publish.yml` — manual test.pypi.org publishing.
+  - `release.yml` — auto release notes extracted from CHANGELOG.
+  - `sync-labels.yml` — applies `.github/labels.yml` on push.
+  - `auto-label.yml` — keyword-based labels on new issues.
+  - `welcome.yml` — first-time contributor greeting (issues + PRs).
+  - `stale.yml` — closes inactive issues / PRs after 90 d with a
+    7-d warning.
+  - All workflows opt-out via repo variable
+    `MCP_FIREWALL_DISABLE_<NAME>`.
+- **`docs/FAQ.md`** — full 10-question FAQ; top three inlined into
+  README.
+- **`docs/PERFORMANCE.md`** — measured latency + community-data table
+  populated by `mcp-firewall benchmark`.
+- **`docs/RELEASING.md`** — release procedure relying on PyPI trusted
+  publishing (no token in repo).
+- **PyPI metadata polish** — extra classifiers, `Changelog` /
+  `Documentation` / `Release notes` / `Security policy` URLs,
+  maintainer email.
+
+### Changed
+
+- **README hybrid rewrite** — radical voice on hero, problem statement,
+  top-3 FAQ; light polish on technical sections. Removed feature-bullet
+  log in favour of a problem-first opener.
+- **Rules detector** — three-pass scan now also folds Cyrillic and
+  Greek homoglyphs into Latin counterparts before regex matching, so
+  payloads using `Іgnore` (Cyrillic) or `ιgnore` (Greek) fire
+  `role_hijack.ignore_previous`.
+- **Health endpoint** — per-connection `wait_for(timeout=5s)` plus
+  `StreamReader limit=8KiB` close the slowloris path. Snapshot is
+  cached for 1 s under an `asyncio.Lock` so a probe storm does not
+  trigger a SCAN every request.
+- **Stats / telemetry** — `det_rules` JSON parse capped at 64 KiB per
+  row to bound CPU on a corrupted audit log.
+- **Batch JSON-RPC handling** — when any member of a batch blocks,
+  the proxy now emits a per-id reply array (one response per request
+  id), not a 1-element substitute. Benign s2c siblings forwarded
+  verbatim; benign c2s siblings get a synthesised
+  `-32099 batch_aborted_by_sibling` error reply.
+
+### Security
+
+- **ReDoS guard for community regex** — `mcp-firewall rules lint
+  --strict` rejects patterns that contain a nested quantifier
+  (`(a+)+`, `(.*x)*`) and any pattern that takes more than 100 ms
+  on a 512-char benign probe (SIGALRM-bounded).
+- **Batch JSON-RPC ID confusion fixed** — see Changed above.
+- **Health endpoint slowloris** — hostile localhost peer can no
+  longer hold an event-loop slot indefinitely.
+- **Cross-script homoglyph evasion closed** — Cyrillic / Greek
+  look-alikes for Latin letters fold during normalisation.
+
+### Known limitations (v0.5 backlog)
+
+- HTTP/SSE transport.
+- Community rules repository (`mcp-firewall/rules-community`).
+- Viewer filters in `mcp-firewall logs` (search by rule id, by
+  trace id).
+- Anthropic Haiku fallback tier for the LLM classifier.
+- Full Unicode `confusables.txt` shipped as data — current homoglyph
+  table is hand-picked from published PoCs.
+
 ## [0.3.0] — 2026-05-05
 
 ### Added
@@ -183,7 +257,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - 27 pytest cases including an end-to-end test that spawns the real CLI
   as a subprocess and asserts a full round-trip through `cat`.
 
-[Unreleased]: https://github.com/churik5/mcp-firewall/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/churik5/mcp-firewall/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/churik5/mcp-firewall/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/churik5/mcp-firewall/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/churik5/mcp-firewall/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/churik5/mcp-firewall/releases/tag/v0.1.0
