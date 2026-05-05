@@ -288,30 +288,56 @@ async def _pump(
                     return
                 continue
 
-            inspection: InspectionResult | None = None
-            if inspector is not None:
-                parsed_msg, _ = parse_frame(decoded)
-                method_hint: str | None = getattr(parsed_msg, "method", None)
-                inspection = await inspector.inspect(
-                    raw=decoded,
-                    parsed=parsed_msg,
-                    direction=direction,
-                    method_hint=method_hint,
-                )
+            # Week-3 audit fix: a JSON-RPC batch is one wire frame but
+            # several logical messages. We inspect each member separately
+            # so the audit log shows per-member verdicts; if ANY member
+            # blocks, we replace the entire batch (wrapped as an array
+            # to keep JSON-RPC format valid).
+            members = split_batch(decoded)
+            is_batch = len(members) > 1
 
-            if (
-                inspection is not None
-                and inspection.action == "block"
-                and inspection.replacement is not None
-            ):
-                replacement_bytes = (inspection.replacement + "\n").encode("utf-8")
+            inspections: list[InspectionResult | None] = []
+            if inspector is not None:
+                for member in members:
+                    parsed_msg, _ = parse_frame(member)
+                    method_hint: str | None = getattr(parsed_msg, "method", None)
+                    insp = await inspector.inspect(
+                        raw=member,
+                        parsed=parsed_msg,
+                        direction=direction,
+                        method_hint=method_hint,
+                    )
+                    inspections.append(insp)
+            else:
+                inspections = [None] * len(members)
+
+            blocking = next(
+                (
+                    i
+                    for i in inspections
+                    if i is not None
+                    and i.action == "block"
+                    and i.replacement is not None
+                ),
+                None,
+            )
+
+            if blocking is not None:
+                if is_batch:
+                    # Wrap the single replacement as a 1-element JSON-RPC
+                    # batch reply so a strict client parsing the array
+                    # still gets a valid response shape.
+                    replacement_text = "[" + (blocking.replacement or "") + "]"
+                else:
+                    replacement_text = blocking.replacement or ""
+                replacement_bytes = (replacement_text + "\n").encode("utf-8")
+
                 if direction == "server_to_client":
-                    # s2c block: substitute the bytes flowing to the client.
-                    if not await _safe_write(dst, replacement_bytes, lock=client_write_lock):
+                    if not await _safe_write(
+                        dst, replacement_bytes, lock=client_write_lock
+                    ):
                         return
                 else:
-                    # c2s block: send synthetic error reply back to client,
-                    # never forward the original request to the server.
                     if not await _safe_write(
                         reverse_dst, replacement_bytes, lock=client_write_lock
                     ):
@@ -319,15 +345,15 @@ async def _pump(
                     _record_synthetic(
                         buffer,
                         session_id=session_id,
-                        raw=inspection.replacement,
-                        inspection=inspection,
+                        raw=blocking.replacement or "",
+                        inspection=blocking,
                     )
-                _log_frame_with_verdict(
+                _log_per_member(
                     buffer,
                     session_id=session_id,
                     direction=direction,
-                    raw=decoded,
-                    inspection=inspection,
+                    members=members,
+                    inspections=inspections,
                 )
                 continue
 
@@ -336,12 +362,12 @@ async def _pump(
                 dst, line, lock=client_write_lock if is_client_target else None
             ):
                 return
-            _log_frame_with_verdict(
+            _log_per_member(
                 buffer,
                 session_id=session_id,
                 direction=direction,
-                raw=decoded,
-                inspection=inspection,
+                members=members,
+                inspections=inspections,
             )
     finally:
         if not dst.is_closing():
@@ -377,20 +403,27 @@ async def _drain_oversized(src: _LineReader, consumed: int) -> bytes:
     return b""
 
 
-def _log_frame_with_verdict(
+def _log_per_member(
     buffer: EventBuffer,
     *,
     session_id: int,
     direction: Direction,
-    raw: str,
-    inspection: InspectionResult | None,
+    members: list[str],
+    inspections: list[InspectionResult | None],
 ) -> None:
-    """Log every JSON-RPC member with optional detector verdict applied.
+    """Log every JSON-RPC member with its own detector verdict.
 
-    When ``inspection`` is ``None`` (detector disabled) this falls back to
-    the Week 1 shape — det_* columns stay NULL.
+    Week-3 audit fix: in a batch frame we now have one inspection per
+    member instead of one shared verdict. ``members`` and ``inspections``
+    must be the same length; the caller (``_pump``) guarantees this by
+    deriving both from the same :func:`split_batch` result.
     """
-    for member in split_batch(raw):
+    if len(members) != len(inspections):
+        raise ValueError(
+            f"_log_per_member: {len(members)} members vs {len(inspections)} "
+            "inspections; the caller must provide one per member"
+        )
+    for member, inspection in zip(members, inspections, strict=True):
         parsed, kind = parse_frame(member)
         record = EventRecord.from_parsed(
             session_id=session_id,
