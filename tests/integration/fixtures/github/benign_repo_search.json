@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Found 3 repositories matching 'mcp':\n- modelcontextprotocol/servers — Official MCP servers (TypeScript, Python)\n- mcp-firewall/mcp-firewall — Prompt-injection firewall and audit log\n- exampleorg/awesome-mcp — Curated list of MCP integrations"
+      }
+    ],
+    "isError": false
+  }
+}

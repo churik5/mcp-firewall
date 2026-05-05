@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Top results for 'asyncio python':\n1. PEP 3156 — Asynchronous IO Support Rebooted (https://peps.python.org/pep-3156/)\n2. asyncio — Asynchronous I/O — Python 3.12 docs (https://docs.python.org/3/library/asyncio.html)\n3. Real Python: Async IO in Python — A Complete Walkthrough"
+      }
+    ],
+    "isError": false
+  }
+}

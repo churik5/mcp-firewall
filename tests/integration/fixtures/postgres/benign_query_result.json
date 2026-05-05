@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Query: SELECT id, name, email FROM customers LIMIT 3;\n\nResults:\n  id |  name   |       email\n-----+---------+--------------------\n   1 | Alice   | alice@example.com\n   2 | Bob     | bob@example.com\n   3 | Carol   | carol@example.com\n\n(3 rows)"
+      }
+    ],
+    "isError": false
+  }
+}

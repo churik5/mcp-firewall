@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {"tools": {"listChanged": true}},
+    "serverInfo": {"name": "github-mcp-server", "version": "1.4.0"}
+  }
+}
