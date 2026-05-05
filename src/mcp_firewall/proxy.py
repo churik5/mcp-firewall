@@ -32,16 +32,21 @@ import signal
 import sys
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import IO, Literal, Protocol, cast
 
 from .config import Settings
 from .detectors.base import InspectionResult
 from .detectors.llm import OllamaClassifier
 from .detectors.rules import RulesEngine
+from .health import HealthState
+from .health import serve as serve_health
 from .inspector import Inspector
 from .models import EventRecord, parse_frame, split_batch
 from .policy import Policy, default_policy
 from .storage import EventBuffer, Storage
+from .telemetry import TelemetryClient
+from .telemetry import is_enabled as telemetry_enabled
 
 Direction = Literal["client_to_server", "server_to_client"]
 
@@ -83,6 +88,7 @@ async def run_proxy(
     *,
     settings: Settings,
     line_limit: int = DEFAULT_LINE_LIMIT_BYTES,
+    health_port: int = 0,
 ) -> ProxyResult:
     """Run the proxy until either side closes. Returns the child's exit code."""
     argv = shlex.split(server_command)
@@ -126,6 +132,30 @@ async def run_proxy(
             inspector, classifier = await _build_inspector(settings, storage)
             client_write_lock = asyncio.Lock()
 
+            # ADR-0005 §3: opt-in telemetry side-car.
+            telemetry_client: TelemetryClient | None = None
+            telemetry_task: asyncio.Task[None] | None = None
+            if telemetry_enabled():
+                telemetry_client = TelemetryClient(settings=settings)
+                telemetry_task = asyncio.create_task(
+                    _telemetry_loop(telemetry_client, storage),
+                    name="telemetry",
+                )
+
+            # ADR-0005 §2: optional loopback health endpoint.
+            health_server: asyncio.AbstractServer | None = None
+            if health_port > 0:
+                try:
+                    health_state = HealthState(started_at=datetime.now(UTC), storage=storage)
+                    health_server = await serve_health(health_state, port=health_port)
+                    logger.info("health: listening on 127.0.0.1:%d/health", health_port)
+                except OSError as exc:
+                    logger.warning(
+                        "health: failed to bind 127.0.0.1:%d (%s); endpoint disabled",
+                        health_port,
+                        exc,
+                    )
+
             try:
                 client_to_server = asyncio.create_task(
                     _pump(
@@ -167,9 +197,9 @@ async def run_proxy(
                 for task in done:
                     if task is stop_waiter:
                         continue
-                    exc = task.exception()
-                    if exc is not None and not isinstance(exc, asyncio.CancelledError):
-                        logger.error("pump task %s failed: %r", task.get_name(), exc)
+                    task_exc = task.exception()
+                    if task_exc is not None and not isinstance(task_exc, asyncio.CancelledError):
+                        logger.error("pump task %s failed: %r", task.get_name(), task_exc)
 
                 if stop_waiter in done:
                     # Forced shutdown — kill both directions immediately.
@@ -212,6 +242,16 @@ async def run_proxy(
                 exit_code = child.returncode if child.returncode is not None else -1
                 dropped = buffer.dropped
             finally:
+                if health_server is not None:
+                    health_server.close()
+                    with suppress(Exception):
+                        await health_server.wait_closed()
+                if telemetry_task is not None:
+                    telemetry_task.cancel()
+                    with suppress(asyncio.CancelledError, Exception):
+                        await telemetry_task
+                if telemetry_client is not None:
+                    await telemetry_client.aclose()
                 if classifier is not None:
                     await classifier.aclose()
 
@@ -315,9 +355,7 @@ async def _pump(
                 (
                     i
                     for i in inspections
-                    if i is not None
-                    and i.action == "block"
-                    and i.replacement is not None
+                    if i is not None and i.action == "block" and i.replacement is not None
                 ),
                 None,
             )
@@ -333,9 +371,7 @@ async def _pump(
                 replacement_bytes = (replacement_text + "\n").encode("utf-8")
 
                 if direction == "server_to_client":
-                    if not await _safe_write(
-                        dst, replacement_bytes, lock=client_write_lock
-                    ):
+                    if not await _safe_write(dst, replacement_bytes, lock=client_write_lock):
                         return
                 else:
                     if not await _safe_write(
@@ -641,6 +677,37 @@ async def _patch_session_with_server_pid(
     if server_pid is None:
         return
     await storage.set_server_pid(session_id, server_pid)
+
+
+async def _telemetry_loop(client: TelemetryClient, storage: Storage) -> None:
+    """Side-car: print the opt-in banner once, then ship a payload after
+    a 60 s warm-up, then once every 24 h until cancelled.
+
+    Cadence per ADR-0005 §3. We split the wait into 60-second chunks so
+    cancellation feels immediate even though the steady-state delay is
+    24 h.
+    """
+    client.show_banner_once()
+
+    initial_delay_s = 60.0
+    daily_s = 24 * 60 * 60.0
+    delay = initial_delay_s
+
+    try:
+        while True:
+            elapsed = 0.0
+            while elapsed < delay:
+                step = min(60.0, delay - elapsed)
+                await asyncio.sleep(step)
+                elapsed += step
+            try:
+                payload = await client.build_payload(storage)
+                await client.send(payload)
+            except Exception as exc:
+                logger.warning("telemetry: payload build/send raised %r", exc)
+            delay = daily_s
+    except asyncio.CancelledError:
+        raise
 
 
 async def _build_inspector(

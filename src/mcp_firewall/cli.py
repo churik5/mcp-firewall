@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import sys
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from .lint import lint_path
 from .models import parse_frame
 from .policy import Policy, default_policy
 from .proxy import run_proxy
+from .stats import Stats, compute_stats, parse_since
 from .storage import Storage, stream_events
 
 # All diagnostic output goes to stderr — stdout is reserved for JSON-RPC frames
@@ -68,6 +70,13 @@ def main() -> None:
     help="Path to a YAML policy file (default: built-in policy).",
 )
 @click.option(
+    "--health-port",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Bind a loopback health endpoint on 127.0.0.1:<port>/health (0 = disabled).",
+)
+@click.option(
     "--verbose",
     "-v",
     count=True,
@@ -79,6 +88,7 @@ def cmd_run(
     config: Path | None,
     detector: bool | None,
     policies: Path | None,
+    health_port: int,
     verbose: int,
 ) -> None:
     """Run the proxy. The MCP client (e.g. Claude Desktop) invokes this."""
@@ -98,8 +108,10 @@ def cmd_run(
         )
     else:
         _console.log("detector : off (audit-only mode)")
+    if health_port > 0:
+        _console.log(f"health  : http://127.0.0.1:{health_port}/health")
     try:
-        result = asyncio.run(run_proxy(server, settings=settings))
+        result = asyncio.run(run_proxy(server, settings=settings, health_port=health_port))
     except KeyboardInterrupt:
         _console.log("interrupted")
         sys.exit(130)
@@ -433,6 +445,105 @@ def _compact(value: str, max_len: int = 120) -> str:
     if len(s) > max_len:
         return s[: max_len - 1] + "…"
     return s
+
+
+@main.command("stats")
+@click.option(
+    "--since",
+    default="7d",
+    show_default=True,
+    help="Window: '7d' / '24h' / '1h' / '30m'.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit JSON (pretty-printed) instead of a Rich table.",
+)
+@click.option(
+    "--compact",
+    is_flag=True,
+    help="With --json, emit a single-line payload (for cron / piping).",
+)
+@click.option(
+    "--db-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Override the audit log location.",
+)
+@click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to a YAML config file.",
+)
+def cmd_stats(
+    since: str,
+    as_json: bool,
+    compact: bool,
+    db_path: Path | None,
+    config: Path | None,
+) -> None:
+    """Read-only summary of the audit log: counts, top rules, latency."""
+    if compact and not as_json:
+        _console.print("[red]error:[/red] --compact requires --json")
+        sys.exit(2)
+    try:
+        delta = parse_since(since)
+    except ValueError as exc:
+        _console.print(f"[red]error:[/red] {exc}")
+        sys.exit(2)
+
+    settings = resolve_settings(cli_db_path=db_path, cli_config=config)
+    if not settings.db_path.exists():
+        _console.print(
+            f"[yellow]no audit log at {settings.db_path}. Run "
+            "`mcp-firewall run --server ...` first.[/yellow]"
+        )
+        sys.exit(1)
+    stats = asyncio.run(_run_stats(settings, since=delta))
+    if as_json:
+        indent = None if compact else 2
+        click.echo(json.dumps(stats.to_dict(), indent=indent, default=str))
+    else:
+        _print_stats_table(stats)
+
+
+async def _run_stats(settings: Settings, *, since: timedelta) -> Stats:
+    async with Storage(settings.db_path) as storage:
+        return await compute_stats(storage, since=since)
+
+
+def _print_stats_table(stats: Stats) -> None:
+    out = Console()
+    period = f"{stats.period_start.isoformat()} → {stats.period_end.isoformat()}"
+    out.print(f"[bold]Stats[/bold] [dim]({period})[/dim]")
+
+    verdict_table = Table(show_lines=False)
+    verdict_table.add_column("verdict", style="bold")
+    verdict_table.add_column("count", justify="right")
+    for v in ("PASS", "WARN", "BLOCK"):
+        style = {"PASS": "green", "WARN": "yellow", "BLOCK": "bold red"}[v]
+        verdict_table.add_row(
+            Text(v, style=style),
+            Text(str(stats.verdicts.get(v, 0)), style=style),
+        )
+    verdict_table.add_row("[dim]TOTAL[/dim]", str(stats.total_events))
+    out.print(verdict_table)
+
+    if stats.top_rules:
+        out.print("\n[bold]Top rules:[/bold]")
+        for i, hit in enumerate(stats.top_rules, 1):
+            out.print(f"  {i}. [cyan]{hit.id}[/cyan] ({hit.count})")
+    else:
+        out.print("\n[dim]no rule hits in this window[/dim]")
+
+    if stats.latency_p50_ms is not None and stats.latency_p95_ms is not None:
+        out.print(
+            f"\n[bold]Inspector latency:[/bold] "
+            f"p50={stats.latency_p50_ms:.1f} ms, "
+            f"p95={stats.latency_p95_ms:.1f} ms"
+        )
 
 
 @main.group("rules")
