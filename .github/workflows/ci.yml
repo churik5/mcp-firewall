@@ -69,4 +69,8 @@ jobs:
       - name: Audit installed dependencies
         # Non-zero exit on any *known* CVE in the resolved tree. Override
         # individual advisories with --ignore-vuln if a fix is unavailable.
-        run: pip-audit --strict
+        # We skip our own (editable, not-yet-on-PyPI) package — auditing
+        # deps is the point; auditing ourselves only matters once we
+        # publish to PyPI (Week 3+). --strict is dropped because it
+        # treats editable packages as collection failures.
+        run: pip-audit --skip-editable
