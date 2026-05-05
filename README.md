@@ -4,7 +4,7 @@
 
 > A prompt-injection firewall and audit log for [Model Context Protocol](https://modelcontextprotocol.io) (MCP) servers.
 
-![mcp-firewall capturing JSON-RPC traffic between an MCP client and server](docs/screenshot.png)
+![mcp-firewall blocking a real prompt injection attack in real time](docs/demo.gif)
 
 > **Status: Week-2 alpha.** The proxy, the audit log, and the prompt-injection detector all work end-to-end. The detector is **off by default** — Week-1 users keep their latency profile until they opt in via `detector.enabled: true`. See the [roadmap](#roadmap).
 
