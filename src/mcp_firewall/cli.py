@@ -18,9 +18,11 @@ from rich.table import Table
 from rich.text import Text
 
 from . import __version__
+from .benchmark import BenchResult, run_benchmarks_sync
 from .config import Settings, resolve_settings
 from .detectors.llm import OllamaClassifier
 from .detectors.rules import RulesEngine
+from .doctor import CheckResult, doctor_sync
 from .inspector import Inspector
 from .lint import lint_path
 from .models import parse_frame
@@ -544,6 +546,108 @@ def _print_stats_table(stats: Stats) -> None:
             f"p50={stats.latency_p50_ms:.1f} ms, "
             f"p95={stats.latency_p95_ms:.1f} ms"
         )
+
+
+@main.command("benchmark")
+@click.option(
+    "--iterations",
+    "-n",
+    type=int,
+    default=200,
+    show_default=True,
+    help="Iterations per workload after the warm-up.",
+)
+@click.option(
+    "--db-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+)
+@click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+)
+def cmd_benchmark(iterations: int, db_path: Path | None, config: Path | None) -> None:
+    """Measure local detection latency.
+
+    Three workloads (rules detector, inspector cache hit, end-to-end
+    cat-server round-trip). Prints p50/p95/p99 per workload.
+    Useful when filing a bug or when deciding if the detector is fast
+    enough for your traffic.
+    """
+    settings = resolve_settings(cli_db_path=db_path, cli_config=config)
+    _console.log(f"running {iterations} iterations per workload (after warm-up)…")
+    results = run_benchmarks_sync(settings, iters=iterations)
+    _print_benchmark_table(results)
+
+
+def _print_benchmark_table(results: list[BenchResult]) -> None:
+    out = Console()
+    table = Table(show_lines=False, expand=True)
+    table.add_column("workload", no_wrap=True)
+    table.add_column("iters", justify="right")
+    table.add_column("p50 (ms)", justify="right")
+    table.add_column("p95 (ms)", justify="right")
+    table.add_column("p99 (ms)", justify="right")
+    for r in results:
+        table.add_row(
+            r.name,
+            str(r.iterations),
+            f"{r.p50_ms:.2f}",
+            f"{r.p95_ms:.2f}",
+            f"{r.p99_ms:.2f}",
+        )
+    out.print(table)
+    for r in results:
+        if r.note:
+            out.print(f"[yellow]note ({r.name}):[/yellow] {r.note}")
+
+
+@main.command("doctor")
+@click.option(
+    "--db-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Override the audit log location.",
+)
+@click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to a YAML config file.",
+)
+def cmd_doctor(db_path: Path | None, config: Path | None) -> None:
+    """Diagnose the local environment.
+
+    Runs four checks (Python version, Ollama, audit DB, rules + policy)
+    and prints a Rich table. Exit code reflects worst status:
+    0 = all pass, 1 = at least one warn, 2 = at least one fail.
+    """
+    settings = resolve_settings(cli_db_path=db_path, cli_config=config)
+    results, overall = doctor_sync(settings)
+    _print_doctor_table(results, overall)
+    sys.exit({"pass": 0, "warn": 1, "fail": 2}[overall])
+
+
+def _print_doctor_table(results: list[CheckResult], overall: str) -> None:
+    out = Console()
+    table = Table(show_lines=False, expand=True)
+    table.add_column("check", no_wrap=True)
+    table.add_column("status", justify="center", no_wrap=True)
+    table.add_column("detail")
+    style = {"pass": "green", "warn": "yellow", "fail": "bold red"}
+    for r in results:
+        table.add_row(
+            r.name,
+            Text(r.status.upper(), style=style[r.status]),
+            r.detail,
+        )
+    out.print(table)
+    for r in results:
+        if r.suggestion and r.status != "pass":
+            out.print(f"  [bold]→[/bold] [dim]{r.name}:[/dim] {r.suggestion}")
+    out.print()
+    out.print(f"overall: [{style[overall]}]{overall.upper()}[/{style[overall]}]")
 
 
 @main.group("rules")
