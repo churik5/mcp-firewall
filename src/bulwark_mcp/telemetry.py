@@ -2,7 +2,7 @@
 
 Privacy posture, in priority order:
 
-1. **Off by default.** Only the env var ``MCP_FIREWALL_TELEMETRY=true``
+1. **Off by default.** Only the env var ``BULWARK_TELEMETRY=true``
    turns it on. There is no CLI flag and no config-file flip — making
    this a deliberate, machine-level choice rather than a one-shot
    accident.
@@ -52,8 +52,8 @@ logger = logging.getLogger(__name__)
 
 TELEMETRY_SCHEMA_VERSION: Final[int] = 1
 DEFAULT_ENDPOINT: Final[str] = "https://telemetry.example.com/v1/ingest"
-ENV_ENABLED: Final[str] = "MCP_FIREWALL_TELEMETRY"
-ENV_URL: Final[str] = "MCP_FIREWALL_TELEMETRY_URL"
+ENV_ENABLED: Final[str] = "BULWARK_TELEMETRY"
+ENV_URL: Final[str] = "BULWARK_TELEMETRY_URL"
 
 _TRUTHY: Final[frozenset[str]] = frozenset(("true", "1", "yes", "on"))
 
@@ -81,7 +81,7 @@ class _Identity:
 
 
 def is_enabled() -> bool:
-    """Read ``MCP_FIREWALL_TELEMETRY`` and return whether to opt in.
+    """Read ``BULWARK_TELEMETRY`` and return whether to opt in.
 
     Anything but truthy values (``true|1|yes|on``, case-insensitive)
     leaves telemetry off — including unset, empty, and ``false``.
@@ -92,7 +92,7 @@ def is_enabled() -> bool:
 def endpoint_url() -> str:
     """Resolved endpoint URL.
 
-    ``MCP_FIREWALL_TELEMETRY_URL=disabled`` is a deliberate kill-switch
+    ``BULWARK_TELEMETRY_URL=disabled`` is a deliberate kill-switch
     that skips the HTTP call but still writes the local log — useful
     for offline development or for users who want to inspect what
     *would* be sent.
@@ -208,7 +208,7 @@ class TelemetryClient:
             "Telemetry enabled. Will send anonymous usage stats to "
             f"{url} daily.\n"
             "Payload: version, OS, Python version, event counts.\n"
-            "Disable: unset MCP_FIREWALL_TELEMETRY or set to false.\n"
+            "Disable: unset BULWARK_TELEMETRY or set to false.\n"
             "See docs/OBSERVABILITY.md for full payload schema.\n"
         )
         with suppress(Exception):

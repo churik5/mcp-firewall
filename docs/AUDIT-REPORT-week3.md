@@ -52,7 +52,7 @@ All deferred items are tracked in `docs/RELEASE-v0.3.0.md` under "Known limitati
 - The audit log preserves the **original** bytes on block; only the bytes leaving the proxy are sanitised. `tests/test_proxy_block.py::test_s2c_prompt_injection_is_blocked_and_replaced` asserts the raw column still contains the attacker payload for forensics.
 - `test_health.py::test_listener_is_loopback_only` checks `getsockname()[0]` against the live socket, not just the call argument — the loopback claim is genuinely tested against the OS.
 - `TelemetryClient.show_banner_once` is single-shot per process AND fenced by the `_banner_shown` flag — no risk of double-banner spam.
-- `MCP_FIREWALL_TELEMETRY_URL=disabled` correctly skips the HTTP call but **still** writes the local log, matching the ADR contract verbatim.
+- `BULWARK_TELEMETRY_URL=disabled` correctly skips the HTTP call but **still** writes the local log, matching the ADR contract verbatim.
 
 ---
 

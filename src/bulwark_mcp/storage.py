@@ -417,7 +417,7 @@ class EventBuffer:
         return self._dropped
 
     async def __aenter__(self) -> Self:
-        self._writer_task = asyncio.create_task(self._run(), name="mcp-firewall-writer")
+        self._writer_task = asyncio.create_task(self._run(), name="bulwark-mcp-writer")
         return self
 
     async def __aexit__(

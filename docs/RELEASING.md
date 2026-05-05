@@ -6,7 +6,7 @@ This is the procedure for cutting a new release. It's short on purpose.
 
 1. **PyPI trusted publisher.** Configure the project on PyPI:
    - Owner: `churik5`
-   - Repository: `mcp-firewall`
+   - Repository: `bulwark-mcp`
    - Workflow filename: `publish.yml`
    - Environment name: `pypi`
 

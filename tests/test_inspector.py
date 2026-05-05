@@ -10,14 +10,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from mcp_firewall.detectors.llm import OllamaClassifier
-from mcp_firewall.detectors.rules import RulesEngine
-from mcp_firewall.inspector import Inspector
-from mcp_firewall.models import ParsedMessage, parse_frame
-from mcp_firewall.policy import Policy
-from mcp_firewall.storage import Storage
+from bulwark_mcp.detectors.llm import OllamaClassifier
+from bulwark_mcp.detectors.rules import RulesEngine
+from bulwark_mcp.inspector import Inspector
+from bulwark_mcp.models import ParsedMessage, parse_frame
+from bulwark_mcp.policy import Policy
+from bulwark_mcp.storage import Storage
 
-_BUILTIN_DIR = Path(__file__).resolve().parent.parent / "src" / "mcp_firewall" / "rules" / "builtin"
+_BUILTIN_DIR = Path(__file__).resolve().parent.parent / "src" / "bulwark_mcp" / "rules" / "builtin"
 
 
 def _ok_handler(label: str) -> Callable[[httpx.Request], httpx.Response]:
@@ -113,7 +113,7 @@ class TestInspectorWithoutClassifier:
         replacement = json.loads(result.replacement)
         assert replacement["id"] == 7
         assert replacement["result"]["isError"] is True
-        assert "mcp-firewall blocked" in replacement["result"]["content"][0]["text"]
+        assert "bulwark-mcp blocked" in replacement["result"]["content"][0]["text"]
         # rules detector should have flagged the canonical pattern
         assert "role_hijack.ignore_previous" in result.rules_hit
 

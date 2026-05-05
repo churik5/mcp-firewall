@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mcp_firewall.lint import lint_path
+from bulwark_mcp.lint import lint_path
 
-_BUILTIN_DIR = Path(__file__).resolve().parent.parent / "src" / "mcp_firewall" / "rules" / "builtin"
+_BUILTIN_DIR = Path(__file__).resolve().parent.parent / "src" / "bulwark_mcp" / "rules" / "builtin"
 
 
 # ---------------------------------------------------------------------

@@ -1,20 +1,20 @@
 # Observability
 
-`mcp-firewall` ships three observability primitives. Two are local-only;
+`bulwark-mcp` ships three observability primitives. Two are local-only;
 the third (telemetry) is **off by default** and must be opted into per
 process via an environment variable. The full architectural intent is
 in [`docs/adr/0005-observability-and-telemetry.md`](adr/0005-observability-and-telemetry.md).
 
-## 1. Local stats — `mcp-firewall stats`
+## 1. Local stats — `bulwark stats`
 
 A read-only summary of the audit log. Reads `events.det_*` columns,
 groups, prints. Never reaches the network.
 
 ```bash
-mcp-firewall stats                          # last 7d, Rich table
-mcp-firewall stats --since 24h              # last 24h
-mcp-firewall stats --json                   # pretty JSON
-mcp-firewall stats --json --compact         # one-line JSON, for cron
+bulwark stats                          # last 7d, Rich table
+bulwark stats --since 24h              # last 24h
+bulwark stats --json                   # pretty JSON
+bulwark stats --json --compact         # one-line JSON, for cron
 ```
 
 JSON shape (`schema_version: 1`):
@@ -72,8 +72,8 @@ Use cases:
 ### Enabling
 
 ```bash
-export MCP_FIREWALL_TELEMETRY=true
-mcp-firewall run --server "..."
+export BULWARK_TELEMETRY=true
+bulwark run --server "..."
 ```
 
 On the first transmission, the proxy writes a multi-line banner to
@@ -90,8 +90,8 @@ config-file flip, by design.
 
 - Default URL: `https://telemetry.example.com/v1/ingest` (placeholder
   in v0.3.0; replaced before launch).
-- Override: `MCP_FIREWALL_TELEMETRY_URL=https://my-self-hosted.example/v1`.
-- **Kill-switch:** `MCP_FIREWALL_TELEMETRY_URL=disabled` skips the
+- Override: `BULWARK_TELEMETRY_URL=https://my-self-hosted.example/v1`.
+- **Kill-switch:** `BULWARK_TELEMETRY_URL=disabled` skips the
   HTTP call entirely while still writing the local log — useful for
   offline development or for users who want to inspect what *would*
   be sent without sending it.

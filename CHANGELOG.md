@@ -6,6 +6,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-05-05
+
+### Changed
+
+- **Renamed project: `mcp-firewall` → `bulwark-mcp`.** PyPI name conflict
+  with an unrelated project of the same name (different architecture:
+  OPA / Rego, RBAC, compliance). Discovered before the public launch.
+  See [ADR-0006](docs/adr/0006-rename-from-mcp-firewall-to-bulwark-mcp.md).
+  - **PyPI distribution name:** `bulwark-mcp` (was `mcp-firewall`).
+  - **CLI command:** `bulwark` (was `mcp-firewall`).
+  - **Python module / import name:** `bulwark_mcp` (was `mcp_firewall`).
+  - **GitHub repository:** `churik5/bulwark-mcp` (was `churik5/mcp-firewall`).
+  - **Environment variables:** `BULWARK_TELEMETRY`, `BULWARK_TELEMETRY_URL`,
+    `BULWARK_DB`, `BULWARK_CONFIG` (were `MCP_FIREWALL_*`).
+- No functional changes. Same code, same behaviour, same versioned schemas.
+
+### Migration from v0.4.0
+
+```bash
+pip uninstall mcp-firewall            # if you installed the prior wheel
+pip install bulwark-mcp               # once published
+# CLI: replace `mcp-firewall <cmd>` with `bulwark <cmd>` everywhere.
+# Env vars: rename MCP_FIREWALL_* → BULWARK_* in your shell rc / systemd unit.
+# Existing data/log.db opens unchanged; schema stays at v2.
+```
+
 ## [0.4.0] — 2026-05-05
 
 ### Added
@@ -257,8 +283,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - 27 pytest cases including an end-to-end test that spawns the real CLI
   as a subprocess and asserts a full round-trip through `cat`.
 
-[Unreleased]: https://github.com/churik5/mcp-firewall/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/churik5/mcp-firewall/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/churik5/mcp-firewall/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/churik5/mcp-firewall/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/churik5/mcp-firewall/releases/tag/v0.1.0
+[Unreleased]: https://github.com/churik5/bulwark-mcp/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/churik5/bulwark-mcp/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/churik5/bulwark-mcp/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/churik5/bulwark-mcp/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/churik5/bulwark-mcp/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/churik5/bulwark-mcp/releases/tag/v0.1.0

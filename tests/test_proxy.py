@@ -1,6 +1,6 @@
 """End-to-end test for the proxy.
 
-We launch ``python -m mcp_firewall run --server "cat"`` as a subprocess so
+We launch ``python -m bulwark_mcp run --server "cat"`` as a subprocess so
 the test exercises the *real* CLI entry point, not just internal helpers.
 ``cat`` is a poor-man's MCP server — it echoes everything we send back to
 stdout, so we can assert on round-trip behaviour and on what landed in the
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from mcp_firewall.storage import Storage
+from bulwark_mcp.storage import Storage
 
 pytestmark = pytest.mark.asyncio
 
@@ -31,7 +31,7 @@ async def _run_proxy_subprocess(
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
-        "mcp_firewall",
+        "bulwark_mcp",
         "run",
         "--server",
         server_cmd,

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mcp_firewall.policy import Policy, PolicyDecision
+from bulwark_mcp.policy import Policy, PolicyDecision
 
 # ---------------------------------------------------------------------
 # Loader

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import httpx
 
-from mcp_firewall.health import HealthState, serve
-from mcp_firewall.storage import Storage
+from bulwark_mcp.health import HealthState, serve
+from bulwark_mcp.storage import Storage
 
 
 def _free_port() -> int:
@@ -37,7 +37,7 @@ class TestSnapshot:
     async def test_snapshot_reflects_audit_log_count(self, tmp_path: Path) -> None:
         async with Storage(tmp_path / "log.db") as storage:
             sid = await storage.start_session(server_command="cat")
-            from mcp_firewall.models import EventRecord
+            from bulwark_mcp.models import EventRecord
 
             await storage.insert_events(
                 [

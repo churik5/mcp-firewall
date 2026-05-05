@@ -1,7 +1,7 @@
-# Sample policies.yaml for mcp-firewall (ADR-0004 §6).
+# Sample policies.yaml for bulwark-mcp (ADR-0004 §6).
 #
 # Pass via:
-#   mcp-firewall run --server "..." --detector --policies ./config/policies.yaml
+#   bulwark run --server "..." --detector --policies ./config/policies.yaml
 # or under the `detector.policies_file` key in your config YAML.
 #
 # Rules are evaluated TOP-TO-BOTTOM, FIRST MATCH WINS. The default action is

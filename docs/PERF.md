@@ -47,13 +47,13 @@ and warm the model with a single prompt before launching the proxy:
 ```bash
 curl -s http://localhost:11434/api/generate \
     -d '{"model":"qwen2.5:3b","prompt":"warmup","stream":false}' >/dev/null
-mcp-firewall run --server "..." --detector
+bulwark run --server "..." --detector
 ```
 
 ## Where to look if latency drifts
 
 - `det_latency_ms` column in the audit log is per-frame inspector latency.
-  `mcp-firewall logs --tail 200` makes it easy to scan.
+  `bulwark logs --tail 200` makes it easy to scan.
 - The classifier cache lives in `classifier_cache` (sha256-keyed); a
   noisy hash distribution there means content is varied enough that
   the cache rarely hits — consider raising `cache_ttl_s` if the

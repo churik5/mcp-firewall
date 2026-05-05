@@ -1,7 +1,7 @@
 """Local-only statistics aggregation over the audit log (ADR-0005 §1).
 
 The stats layer is read-only: it never mutates the DB and never reaches
-the network. It powers ``mcp-firewall stats`` and the (separate)
+the network. It powers ``bulwark stats`` and the (separate)
 telemetry payload builder, both of which read the same shape of data
 so users can predict exactly what telemetry will report by running
 ``stats`` first.

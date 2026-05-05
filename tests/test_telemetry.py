@@ -16,9 +16,9 @@ from typing import Any
 import httpx
 import pytest
 
-from mcp_firewall.config import DetectorSettings, Settings
-from mcp_firewall.storage import Storage
-from mcp_firewall.telemetry import (
+from bulwark_mcp.config import DetectorSettings, Settings
+from bulwark_mcp.storage import Storage
+from bulwark_mcp.telemetry import (
     DEFAULT_ENDPOINT,
     ENV_ENABLED,
     ENV_URL,
@@ -309,5 +309,5 @@ class TestBanner:
         out = sink.getvalue()
         assert out.count("Telemetry enabled") == 1
         assert "https://my.example/v1" in out
-        assert "MCP_FIREWALL_TELEMETRY" in out
+        assert "BULWARK_TELEMETRY" in out
         assert "OBSERVABILITY.md" in out

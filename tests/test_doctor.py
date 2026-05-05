@@ -1,4 +1,4 @@
-"""Tests for the `mcp-firewall doctor` checks (Week 4)."""
+"""Tests for the `bulwark doctor` checks (Week 4)."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from unittest import mock
 import httpx
 import pytest
 
-from mcp_firewall.config import DetectorSettings, Settings
-from mcp_firewall.doctor import (
+from bulwark_mcp.config import DetectorSettings, Settings
+from bulwark_mcp.doctor import (
     CheckResult,
     _check_db,
     _check_ollama,

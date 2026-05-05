@@ -56,7 +56,7 @@ class ClassifierResult:
 
 @dataclass(frozen=True)
 class InspectionResult:
-    """End-to-end output of :class:`mcp_firewall.inspector.Inspector`.
+    """End-to-end output of :class:`bulwark_mcp.inspector.Inspector`.
 
     The pump uses ``action`` to choose between forwarding the original
     bytes and substituting ``replacement``. Everything else is for the

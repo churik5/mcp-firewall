@@ -477,7 +477,7 @@ def _compose_batch_aborted_reply(member: str) -> str | None:
         "id": parsed.id,
         "error": {
             "code": -32099,
-            "message": "batch aborted: a sibling request was blocked by mcp-firewall",
+            "message": "batch aborted: a sibling request was blocked by bulwark-mcp",
         },
     }
     return json.dumps(body, separators=(",", ":"))

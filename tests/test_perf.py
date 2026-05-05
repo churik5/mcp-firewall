@@ -27,14 +27,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from mcp_firewall.detectors.llm import OllamaClassifier
-from mcp_firewall.detectors.rules import RulesEngine
-from mcp_firewall.inspector import Inspector
-from mcp_firewall.models import parse_frame
-from mcp_firewall.policy import default_policy
-from mcp_firewall.storage import Storage
+from bulwark_mcp.detectors.llm import OllamaClassifier
+from bulwark_mcp.detectors.rules import RulesEngine
+from bulwark_mcp.inspector import Inspector
+from bulwark_mcp.models import parse_frame
+from bulwark_mcp.policy import default_policy
+from bulwark_mcp.storage import Storage
 
-_BUILTIN_DIR = Path(__file__).resolve().parent.parent / "src" / "mcp_firewall" / "rules" / "builtin"
+_BUILTIN_DIR = Path(__file__).resolve().parent.parent / "src" / "bulwark_mcp" / "rules" / "builtin"
 
 
 def _percentile(samples: list[float], p: float) -> float:

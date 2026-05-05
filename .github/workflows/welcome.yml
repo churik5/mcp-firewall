@@ -21,9 +21,9 @@ jobs:
           issue-message: |
             Thanks for the report. A few things that help me get to it faster:
 
-            - If this is a false positive on a rule, paste the exact text and the rule id (`mcp-firewall logs --tail 5` shows both).
+            - If this is a false positive on a rule, paste the exact text and the rule id (`bulwark logs --tail 5` shows both).
             - If it's a false negative, paste the input and which rule you'd expect to fire.
-            - If it's a build / install issue, the output of `mcp-firewall doctor` is usually the fastest path.
+            - If it's a build / install issue, the output of `bulwark doctor` is usually the fastest path.
 
             I read every issue. Replies may take a couple of days — this is a solo project around a day job.
           pr-message: |
@@ -35,6 +35,6 @@ jobs:
             - Conventional commit subject (`feat:`, `fix:`, `docs:`, …).
             - Tests for new behaviour. Bug fixes need a regression test.
 
-            For new rule packs: `mcp-firewall rules lint <file>` for community packs, `--strict` for built-in promotion. The promotion ladder is in `CONTRIBUTING.md`.
+            For new rule packs: `bulwark rules lint <file>` for community packs, `--strict` for built-in promotion. The promotion ladder is in `CONTRIBUTING.md`.
 
             Will get to it within a couple of days.

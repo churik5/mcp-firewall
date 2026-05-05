@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from mcp_firewall.models import (
+from bulwark_mcp.models import (
     EventRecord,
     MCPNotification,
     MCPRequest,

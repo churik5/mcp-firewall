@@ -75,7 +75,7 @@ async def test_attack_in_issue_body_is_blocked(tmp_path: Path) -> None:
     assert received["id"] == 9
     assert received["result"]["isError"] is True
     text = received["result"]["content"][0]["text"]
-    assert "mcp-firewall blocked" in text
+    assert "bulwark-mcp blocked" in text
     # Attacker payload must NOT survive into the agent-bound reply.
     assert "attacker.example.com" not in text
     assert "credentials" not in text

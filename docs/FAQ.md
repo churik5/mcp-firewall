@@ -4,7 +4,7 @@ The questions I get most often. Open an issue if yours isn't here.
 
 ## Why not just use Lakera, Cloudflare AI Gateway, or Prompt Armor?
 
-Different threat model. Those products sit in front of an LLM API and inspect the chat completion request as a whole. `mcp-firewall` sits in front of an MCP *server* and inspects the JSON-RPC frame the agent reads as data. The two layers don't compete; you can run both. The reason this exists separately:
+Different threat model. Those products sit in front of an LLM API and inspect the chat completion request as a whole. `bulwark-mcp` sits in front of an MCP *server* and inspects the JSON-RPC frame the agent reads as data. The two layers don't compete; you can run both. The reason this exists separately:
 
 - **Self-hosted by default.** No frame leaves your machine unless you opt in to telemetry, and the telemetry payload doesn't carry traffic content. Some teams can't ship tool-result text to a third party for compliance reasons.
 - **Audit log is local SQLite.** Forensics for a missed attack means `sqlite3 data/log.db`, not a vendor portal.
@@ -22,7 +22,7 @@ If you do run Ollama, the default model is `qwen2.5:3b` (~2 GB on disk). Any mod
 
 The proxy is server-agnostic — it speaks JSON-RPC over stdio, which is what the MCP spec requires. So in principle, anything that talks MCP works.
 
-We ship integration tests for `github`, `brave-search`, and `postgres`. See [`docs/INTEGRATIONS.md`](INTEGRATIONS.md) for what each test asserts and the per-server config snippet. If you've used `mcp-firewall` with a server we don't have tests for, a PR adding fixtures + a smoke/benign/attack test trio is the most welcome contribution today.
+We ship integration tests for `github`, `brave-search`, and `postgres`. See [`docs/INTEGRATIONS.md`](INTEGRATIONS.md) for what each test asserts and the per-server config snippet. If you've used `bulwark-mcp` with a server we don't have tests for, a PR adding fixtures + a smoke/benign/attack test trio is the most welcome contribution today.
 
 The only real compatibility constraint: the server must speak newline-delimited JSON-RPC on stdio. HTTP/SSE transport is on the roadmap (ADR-0006 territory) but not yet shipped.
 
@@ -30,7 +30,7 @@ The only real compatibility constraint: the server must speak newline-delimited 
 
 The classifier is a local Ollama instance by default — your tool result content never leaves localhost.
 
-If you set `MCP_FIREWALL_TELEMETRY=true`, the proxy starts shipping a daily anonymous payload to a maintainer-run endpoint. That payload contains:
+If you set `BULWARK_TELEMETRY=true`, the proxy starts shipping a daily anonymous payload to a maintainer-run endpoint. That payload contains:
 
 - `version`, `platform` (linux/darwin), `python_version` — bucketed.
 - `installation_id` (UUID, regenerated when you delete `data/installation_id`).
@@ -38,7 +38,7 @@ If you set `MCP_FIREWALL_TELEMETRY=true`, the proxy starts shipping a daily anon
 
 It does not contain rule names, method names, server commands, IPs, hostnames, or anything from a tool result. Every payload is appended verbatim to `data/telemetry.log` *before* the HTTP call, so you can `cat` the log and audit what's actually sent. Full schema: [`docs/OBSERVABILITY.md`](OBSERVABILITY.md).
 
-To disable mid-flight: unset the env var, or set `MCP_FIREWALL_TELEMETRY_URL=disabled` to keep the local log but skip the HTTP call.
+To disable mid-flight: unset the env var, or set `BULWARK_TELEMETRY_URL=disabled` to keep the local log but skip the HTTP call.
 
 ## Can I write custom rules?
 
@@ -48,7 +48,7 @@ Yes. A rule is a YAML entry like this:
 rules:
   - id: namespace.snake_case_id
     description: "What it catches, in one sentence."
-    pattern: '<your-regex-here>'    # see src/mcp_firewall/rules/builtin/ for live examples
+    pattern: '<your-regex-here>'    # see src/bulwark_mcp/rules/builtin/ for live examples
     score: 0.85
     apply_to: [server_to_client]
     source: "https://link-to-source"
@@ -59,8 +59,8 @@ Drop a `.yaml` file under `rules/community/` (gitignored — you control the pat
 Validate before shipping:
 
 ```bash
-mcp-firewall rules lint <file>           # basic checks
-mcp-firewall rules lint --strict <file>  # quality gate for built-in promotion
+bulwark rules lint <file>           # basic checks
+bulwark rules lint --strict <file>  # quality gate for built-in promotion
 ```
 
 The `--strict` mode is documented in [`CONTRIBUTING.md`](../CONTRIBUTING.md). Required for built-in promotion, optional for community packs.
@@ -73,7 +73,7 @@ With detector on and rules-only: ~5–10 ms p95. The three-pass scan over ~25 ru
 
 With detector on and the LLM classifier engaged: cache hit is ~10 ms; cache miss against a warm `qwen2.5:3b` is 140–180 ms p50 on Apple Silicon (M-series). Cold model load on the very first frame is 1–2 s — the inspector's hard guard catches that and downgrades the verdict to WARN so the pump never stalls beyond 250 ms.
 
-Numbers in [`docs/PERFORMANCE.md`](PERFORMANCE.md). To get baseline numbers on your machine: `mcp-firewall benchmark`.
+Numbers in [`docs/PERFORMANCE.md`](PERFORMANCE.md). To get baseline numbers on your machine: `bulwark benchmark`.
 
 ## Is this production-ready?
 
@@ -91,11 +91,11 @@ For commercial use, AGPL means you can run it inside your company without restri
 
 Open a GitHub issue with:
 
-- The input that triggered the rule (`mcp-firewall logs --tail 5` shows the original `raw` column).
+- The input that triggered the rule (`bulwark logs --tail 5` shows the original `raw` column).
 - The rule id (same row).
 - What you expected (PASS / WARN, with reasoning).
 
-If the rule is in `src/mcp_firewall/rules/builtin/`, I'll tighten the regex. If it's a community pack, I'll ping the original author on the issue. Either way, the fix usually ships in the next patch release.
+If the rule is in `src/bulwark_mcp/rules/builtin/`, I'll tighten the regex. If it's a community pack, I'll ping the original author on the issue. Either way, the fix usually ships in the next patch release.
 
 If you can include a benign example of the same general shape that *should* still be caught, that's gold — it lets me write a regression test in the same PR.
 
@@ -104,14 +104,14 @@ If you can include a benign example of the same general shape that *should* stil
 Short version, full version in [`README.md`](../README.md#roadmap):
 
 - v0.4: launch (PyPI publish, GitHub workflows, README polish — this release).
-- v0.5: HTTP/SSE transport, community rules repository, viewer filters in `mcp-firewall logs`.
+- v0.5: HTTP/SSE transport, community rules repository, viewer filters in `bulwark logs`.
 - v0.6+: Pro tier — hosted log shipping, threat-feed sync, alerts to Slack/Discord/Telegram.
 
 The Pro tier is additive on top of the open-source core; the firewall itself stays AGPL forever.
 
 ## Can I run this in production / for commercial use?
 
-Yes. AGPL-3.0 covers internal commercial deployment with no restrictions — you're using it on your own machines, that's fine. The license clause that catches people is the "service over a network" trigger: if you wrap `mcp-firewall` in a hosted product that other people pay to use, you have to make your modifications available to them under AGPL, or buy a commercial license from me.
+Yes. AGPL-3.0 covers internal commercial deployment with no restrictions — you're using it on your own machines, that's fine. The license clause that catches people is the "service over a network" trigger: if you wrap `bulwark-mcp` in a hosted product that other people pay to use, you have to make your modifications available to them under AGPL, or buy a commercial license from me.
 
 For self-hosted internal tools, agent platforms running inside one company, or an MCP gateway you ship to your own employees: AGPL is fine, no extra paperwork.
 

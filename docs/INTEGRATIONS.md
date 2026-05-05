@@ -1,6 +1,6 @@
 # MCP server integrations
 
-Status of each MCP server we have explicitly tested with `mcp-firewall`.
+Status of each MCP server we have explicitly tested with `bulwark-mcp`.
 
 | Server | Tested | Detection | Config snippet | Notes |
 |---|---|---|---|---|
@@ -50,7 +50,7 @@ Open a GitHub issue with:
 
 - The exact JSON-RPC frame the upstream server sent (please redact
   any credentials or PII first).
-- The verdict you saw in the audit log (`mcp-firewall logs --tail 5`).
+- The verdict you saw in the audit log (`bulwark logs --tail 5`).
 - The verdict you expected.
 
 That's the single most valuable contribution today. Public PoCs of

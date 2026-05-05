@@ -3,15 +3,16 @@ requires = ["hatchling>=1.18"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mcp-firewall"
-version = "0.4.0"
-description = "Prompt-injection firewall and audit log for Model Context Protocol (MCP) servers"
+name = "bulwark-mcp"
+version = "0.4.1"
+description = "Open-source firewall for MCP servers — catches indirect prompt injection before it reaches your AI agent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "Aleksandr Churilov" }]
 maintainers = [{ name = "Aleksandr Churilov", email = "churik0509@gmail.com" }]
 keywords = [
+    "bulwark",
     "mcp",
     "model-context-protocol",
     "prompt-injection",
@@ -67,19 +68,19 @@ dev = [
 ]
 
 [project.scripts]
-mcp-firewall = "mcp_firewall.cli:main"
+bulwark = "bulwark_mcp.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/churik5/mcp-firewall"
-Repository = "https://github.com/churik5/mcp-firewall"
-Issues = "https://github.com/churik5/mcp-firewall/issues"
-Changelog = "https://github.com/churik5/mcp-firewall/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/churik5/mcp-firewall/blob/main/README.md"
-"Release notes" = "https://github.com/churik5/mcp-firewall/releases"
-"Security policy" = "https://github.com/churik5/mcp-firewall/security/policy"
+Homepage = "https://github.com/churik5/bulwark-mcp"
+Repository = "https://github.com/churik5/bulwark-mcp"
+Issues = "https://github.com/churik5/bulwark-mcp/issues"
+Changelog = "https://github.com/churik5/bulwark-mcp/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/churik5/bulwark-mcp/blob/main/README.md"
+"Release notes" = "https://github.com/churik5/bulwark-mcp/releases"
+"Security policy" = "https://github.com/churik5/bulwark-mcp/security/policy"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mcp_firewall"]
+packages = ["src/bulwark_mcp"]
 
 [tool.ruff]
 target-version = "py311"

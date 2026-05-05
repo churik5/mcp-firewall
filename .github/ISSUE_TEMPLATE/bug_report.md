@@ -14,7 +14,7 @@ A clear and concise description of what's broken.
 
 Minimal steps to reproduce the issue:
 
-1. Set up `mcp-firewall` like this: ...
+1. Set up `bulwark-mcp` like this: ...
 2. Configure the MCP server: ...
 3. Run this command: ...
 4. Observe ...
@@ -29,7 +29,7 @@ What actually happened. Include error messages, stack traces, or unexpected outp
 
 ## Environment
 
-- mcp-firewall version: <!-- run `mcp-firewall --version` -->
+- bulwark-mcp version: <!-- run `bulwark --version` -->
 - Python version: <!-- run `python --version` -->
 - Operating system and version: <!-- e.g. macOS 14.5, Ubuntu 22.04 -->
 - MCP server you were using: <!-- e.g. filesystem, github, brave-search -->
@@ -39,7 +39,7 @@ What actually happened. Include error messages, stack traces, or unexpected outp
 ## Logs
 
 Paste relevant output from the audit log:
-mcp-firewall logs --tail 20 --json
+bulwark logs --tail 20 --json
 
 If the bug is about a specific event, include its full row from `--json` output.
 
@@ -51,7 +51,7 @@ If the bug is about a specific event, include its full row from `--json` output.
 
 ## Pre-flight checklist
 
-- [ ] I'm using the latest released version (`pip install -U mcp-firewall`)
-- [ ] I've checked the [existing issues](https://github.com/churik5/mcp-firewall/issues) for duplicates
+- [ ] I'm using the latest released version (`pip install -U bulwark-mcp`)
+- [ ] I've checked the [existing issues](https://github.com/churik5/bulwark-mcp/issues) for duplicates
 - [ ] I've redacted any sensitive information from logs and configuration
 - [ ] This is **not** a security vulnerability (those go through [SECURITY.md](../../SECURITY.md))

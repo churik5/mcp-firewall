@@ -1,4 +1,4 @@
-# Contributing to mcp-firewall
+# Contributing to bulwark-mcp
 
 Thanks for considering a contribution! This document covers what you need to know to make your PR easy to review and merge.
 
@@ -17,8 +17,8 @@ In rough order of impact:
 ## Setup
 
 ```bash
-git clone https://github.com/churik5/mcp-firewall.git
-cd mcp-firewall
+git clone https://github.com/churik5/bulwark-mcp.git
+cd bulwark-mcp
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -30,7 +30,7 @@ ruff check . && ruff format --check . && mypy src/ tests/
 
 ## Authoring rules
 
-Rule packs are YAML files under `src/mcp_firewall/rules/builtin/` (shipped with the package) or `rules/community/` (gitignored, user-supplied). Schema:
+Rule packs are YAML files under `src/bulwark_mcp/rules/builtin/` (shipped with the package) or `rules/community/` (gitignored, user-supplied). Schema:
 
 ```yaml
 rules:
@@ -54,10 +54,10 @@ rules:
 We ship two tiers of rules:
 
 - **`rules/community/`** — third-party YAML drops. Lower bar:
-  - `mcp-firewall rules lint <file>` (basic mode) must pass.
+  - `bulwark rules lint <file>` (basic mode) must pass.
   - PR description states what attack class the rule targets.
-- **`src/mcp_firewall/rules/builtin/`** — ships with the package, runs by default. Higher bar:
-  - `mcp-firewall rules lint --strict <file>` must pass with **zero warnings**.
+- **`src/bulwark_mcp/rules/builtin/`** — ships with the package, runs by default. Higher bar:
+  - `bulwark rules lint --strict <file>` must pass with **zero warnings**.
   - At least **two tests** in the same PR: one positive (the rule fires on the canonical attack) and one false-positive (the rule does *not* fire on a benign string that mentions related vocabulary).
   - `description` is a complete sentence; `source` is a working URL.
 
@@ -65,7 +65,7 @@ Open the PR against `rules/community/` first; once it has been used in the wild 
 
 ## Integration tests
 
-To claim "mcp-firewall works with `<your-favourite-MCP-server>`", add a directory under `tests/integration/`:
+To claim "bulwark-mcp works with `<your-favourite-MCP-server>`", add a directory under `tests/integration/`:
 
 ```
 tests/integration/<server-name>/

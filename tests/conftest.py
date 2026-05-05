@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest_asyncio
 
-from mcp_firewall.storage import Storage
+from bulwark_mcp.storage import Storage
 
 
 @pytest_asyncio.fixture

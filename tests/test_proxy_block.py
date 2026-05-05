@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from mcp_firewall.storage import Storage
+from bulwark_mcp.storage import Storage
 
 
 async def _run_proxy_subprocess(
@@ -41,7 +41,7 @@ async def _run_proxy_subprocess(
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
-        "mcp_firewall",
+        "bulwark_mcp",
         "run",
         "--server",
         server_cmd,
@@ -130,7 +130,7 @@ async def test_s2c_prompt_injection_is_blocked_and_replaced(tmp_path: Path) -> N
     assert received["id"] == 7
     assert received["result"]["isError"] is True
     sanitised_text = received["result"]["content"][0]["text"]
-    assert "mcp-firewall blocked" in sanitised_text
+    assert "bulwark-mcp blocked" in sanitised_text
     assert "exfiltrate" not in sanitised_text
     assert "ignore all previous instructions" not in sanitised_text.lower()
 

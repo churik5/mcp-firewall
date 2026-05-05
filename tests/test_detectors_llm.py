@@ -14,8 +14,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from mcp_firewall.detectors.llm import OllamaClassifier, _parse_label
-from mcp_firewall.storage import Storage
+from bulwark_mcp.detectors.llm import OllamaClassifier, _parse_label
+from bulwark_mcp.storage import Storage
 
 
 def _ok_handler(label: str) -> Callable[[httpx.Request], httpx.Response]:

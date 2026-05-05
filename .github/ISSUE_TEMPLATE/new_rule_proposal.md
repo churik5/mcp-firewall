@@ -26,9 +26,9 @@ If this is from a real public source — link it (CVE, GitHub issue, blog post, 
 
 ## Why current rules miss it
 
-Have you tested this against current mcp-firewall rules? What happens?
+Have you tested this against current bulwark rules? What happens?
 
-Run: `echo "<your test payload>" | mcp-firewall detect`
+Run: `echo "<your test payload>" | bulwark detect`
 
 Paste the output. If it returns PASS or fires the wrong rule — that's the gap.
 
@@ -65,7 +65,7 @@ Links to public PoCs, related research, similar rules in other tools (garak, pro
 ## Pre-flight checklist
 
 - [ ] This attack pattern is publicly documented (not a private engagement)
-- [ ] I've tested current mcp-firewall and confirmed it doesn't catch this
+- [ ] I've tested current bulwark-mcp and confirmed it doesn't catch this
 - [ ] I've read CONTRIBUTING.md authoring rules section
 - [ ] If I'm proposing built-in tier, I'm willing to provide both positive and negative test cases
 _*_*_*_*_*

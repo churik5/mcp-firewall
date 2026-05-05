@@ -56,5 +56,5 @@ jobs:
           /tmp/check/bin/pip install \
             --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            mcp-firewall
-          /tmp/check/bin/python -m mcp_firewall --version
+            bulwark-mcp
+          /tmp/check/bin/python -m bulwark_mcp --version

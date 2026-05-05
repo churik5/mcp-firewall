@@ -1,4 +1,4 @@
-"""Entry point for ``python -m mcp_firewall``."""
+"""Entry point for ``python -m bulwark_mcp``."""
 
 from .cli import main
 

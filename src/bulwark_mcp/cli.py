@@ -1,4 +1,4 @@
-"""Command-line interface for mcp-firewall."""
+"""Command-line interface for bulwark-mcp."""
 
 from __future__ import annotations
 
@@ -37,9 +37,9 @@ _console = Console(stderr=True)
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(__version__, package_name="mcp-firewall")
+@click.version_option(__version__, package_name="bulwark-mcp")
 def main() -> None:
-    """mcp-firewall — prompt-injection firewall for MCP servers."""
+    """bulwark-mcp — prompt-injection firewall for MCP servers."""
 
 
 @main.command("run")
@@ -167,7 +167,7 @@ def cmd_logs(
     if not settings.db_path.exists():
         _console.print(
             f"[yellow]no audit log at {settings.db_path}. Run "
-            f"`mcp-firewall run --server ...` first.[/yellow]"
+            f"`bulwark run --server ...` first.[/yellow]"
         )
         sys.exit(1)
     try:
@@ -500,7 +500,7 @@ def cmd_stats(
     if not settings.db_path.exists():
         _console.print(
             f"[yellow]no audit log at {settings.db_path}. Run "
-            "`mcp-firewall run --server ...` first.[/yellow]"
+            "`bulwark run --server ...` first.[/yellow]"
         )
         sys.exit(1)
     stats = asyncio.run(_run_stats(settings, since=delta))

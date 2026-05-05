@@ -292,7 +292,7 @@ def _compose_block_replacement(
                 "content": [
                     {
                         "type": "text",
-                        "text": f"[mcp-firewall blocked: {message}. trace={trace_id}]",
+                        "text": f"[bulwark-mcp blocked: {message}. trace={trace_id}]",
                     }
                 ],
                 "isError": True,
@@ -308,7 +308,7 @@ def _compose_block_replacement(
             "id": parsed.id,
             "error": {
                 "code": -32099,
-                "message": f"blocked by mcp-firewall: {message}",
+                "message": f"blocked by bulwark-mcp: {message}",
                 "data": {"trace": trace_id},
             },
         }

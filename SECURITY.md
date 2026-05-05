@@ -4,7 +4,7 @@
 
 **Do not open a public GitHub issue.** Instead, report security vulnerabilities through GitHub's private Security Advisories flow:
 
-> https://github.com/churik5/mcp-firewall/security/advisories/new
+> https://github.com/churik5/bulwark-mcp/security/advisories/new
 
 The advisory is private to the maintainer and the reporter until a fix lands. We will:
 
@@ -18,7 +18,7 @@ If you do not receive an acknowledgement within 72 h, you may open a *generic* G
 
 In scope:
 
-- The proxy itself (`mcp-firewall run`).
+- The proxy itself (`bulwark run`).
 - Detection-layer bypass classes that could let attacker-controlled content reach an agent despite a `block` policy.
 - Audit-log integrity (forensic preservation, schema migrations).
 - Local-data-at-rest concerns in the SQLite log.

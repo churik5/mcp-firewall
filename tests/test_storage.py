@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from mcp_firewall.models import EventRecord
-from mcp_firewall.storage import EventBuffer, Storage
+from bulwark_mcp.models import EventRecord
+from bulwark_mcp.storage import EventBuffer, Storage
 
 
 def _event(session_id: int, **kw: object) -> EventRecord:

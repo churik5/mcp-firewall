@@ -14,7 +14,7 @@ A clear description of the use case. Without a concrete user story, it's hard to
 
 ## Proposed solution
 
-What you'd like mcp-firewall to do. Be specific:
+What you'd like bulwark-mcp to do. Be specific:
 
 - New CLI command or flag?
 - New configuration option?
@@ -31,10 +31,10 @@ A concrete walkthrough of how someone would use this feature:
 
 ```bash
 # Before
-mcp-firewall ...
+bulwark-mcp ...
 
 # After
-mcp-firewall ...
+bulwark-mcp ...
 ```
 
 ## Scope and complexity
@@ -57,6 +57,6 @@ Links to similar features in other tools, prior art, related issues, screenshots
 
 ## Pre-flight checklist
 
-- [ ] I've checked [existing issues](https://github.com/churik5/mcp-firewall/issues) and [discussions](https://github.com/churik5/mcp-firewall/discussions) for similar proposals
+- [ ] I've checked [existing issues](https://github.com/churik5/bulwark-mcp/issues) and [discussions](https://github.com/churik5/bulwark-mcp/discussions) for similar proposals
 - [ ] I've read [CONTRIBUTING.md](../../CONTRIBUTING.md) and this fits the project scope (not in the "we'll usually decline" list)
 - [ ] I'm willing to help implement this, or accept that the maintainer may not have time

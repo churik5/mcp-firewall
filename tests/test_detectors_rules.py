@@ -17,10 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from mcp_firewall.detectors.rules import RulesEngine
+from bulwark_mcp.detectors.rules import RulesEngine
 
 # Resolve the package's builtin rules directory once.
-_BUILTIN_DIR = Path(__file__).resolve().parent.parent / "src" / "mcp_firewall" / "rules" / "builtin"
+_BUILTIN_DIR = Path(__file__).resolve().parent.parent / "src" / "bulwark_mcp" / "rules" / "builtin"
 
 
 @pytest.fixture(scope="module")

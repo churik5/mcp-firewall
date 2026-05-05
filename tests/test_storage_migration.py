@@ -22,8 +22,8 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from mcp_firewall.models import EventRecord
-from mcp_firewall.storage import Storage
+from bulwark_mcp.models import EventRecord
+from bulwark_mcp.storage import Storage
 
 _V1_DDL = """
 CREATE TABLE schema_version (version INTEGER PRIMARY KEY);

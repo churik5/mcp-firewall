@@ -1,4 +1,4 @@
-"""mcp-firewall doctor — environment diagnostic.
+"""bulwark doctor — environment diagnostic.
 
 Runs four checks and prints a Rich table with PASS / WARN / FAIL plus
 a short suggestion per failed check. Off the hot path; safe to run
@@ -150,7 +150,7 @@ async def _check_db(settings: Settings) -> CheckResult:
             status="warn",
             detail=f"schema version {current} — migration to v{SCHEMA_VERSION} pending",
             suggestion=(
-                "The next time you run `mcp-firewall run ...` the migration "
+                "The next time you run `bulwark run ...` the migration "
                 "will apply automatically. Run it once before relying on "
                 "the new det_* columns."
             ),
@@ -159,7 +159,7 @@ async def _check_db(settings: Settings) -> CheckResult:
         name="Audit log DB",
         status="warn",
         detail=f"schema version {current} is newer than this binary expects ({SCHEMA_VERSION})",
-        suggestion="Upgrade mcp-firewall, or point --db-path at a fresh DB.",
+        suggestion="Upgrade bulwark-mcp, or point --db-path at a fresh DB.",
     )
 
 
@@ -173,7 +173,7 @@ async def _check_rules_and_policy(settings: Settings) -> CheckResult:
             status="fail",
             detail=f"{len(errors)} error(s) in {det.rules_dir}",
             suggestion=(
-                f"Run `mcp-firewall rules lint {det.rules_dir}` for the full "
+                f"Run `bulwark rules lint {det.rules_dir}` for the full "
                 "list. Most errors are bad regex or missing required fields."
             ),
         )

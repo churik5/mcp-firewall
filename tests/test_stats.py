@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from mcp_firewall.models import EventRecord
-from mcp_firewall.stats import (
+from bulwark_mcp.models import EventRecord
+from bulwark_mcp.stats import (
     STATS_SCHEMA_VERSION,
     compute_stats,
     parse_since,
 )
-from mcp_firewall.storage import Storage
+from bulwark_mcp.storage import Storage
 
 # ---------------------------------------------------------------------
 # parse_since

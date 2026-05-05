@@ -1,4 +1,4 @@
-# mcp-firewall — example configuration
+# bulwark-mcp — example configuration
 #
 # This file is OPTIONAL. Every value here can also be set via CLI flag
 # or env var. Precedence (high → low):
@@ -20,7 +20,7 @@ storage:
 
 # --- Logging --------------------------------------------------------------
 logging:
-  # Where mcp-firewall's OWN diagnostics go (NOT the audit log).
+  # Where bulwark-mcp's OWN diagnostics go (NOT the audit log).
   # stderr | <path>
   # We never log to stdout because that channel is reserved for JSON-RPC frames
   # going back to the client.
@@ -33,8 +33,8 @@ logging:
 # ADR-0004 §2.
 detector:
   enabled: false                    # set to true to turn the firewall on
-  # rules_dir: "/etc/mcp-firewall/rules"   # default: package's built-in pack
-  # policies_file: "/etc/mcp-firewall/policies.yaml"   # default: built-in policy
+  # rules_dir: "/etc/bulwark-mcp/rules"   # default: package's built-in pack
+  # policies_file: "/etc/bulwark-mcp/policies.yaml"   # default: built-in policy
   max_latency_ms: 200               # soft budget; hard abort at 1.25× this
   short_circuit_threshold: 0.9      # rules score ≥ this skips the LLM
 

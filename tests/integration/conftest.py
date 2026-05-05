@@ -2,7 +2,7 @@
 
 Each integration test fixture is a JSON file shipped under
 ``tests/integration/fixtures/<server>/``. The test pipes the fixture's
-contents through ``mcp-firewall run --server cat``: ``cat`` echoes the
+contents through ``bulwark run --server cat``: ``cat`` echoes the
 bytes back as if they were the server's response, the proxy inspects
 the s2c stream, and the test asserts on what reached stdout and on
 the audit log.
@@ -25,7 +25,7 @@ from typing import Any
 import pytest
 import yaml
 
-from mcp_firewall.storage import Storage
+from bulwark_mcp.storage import Storage
 
 FIXTURES_ROOT = Path(__file__).parent / "fixtures"
 
@@ -71,7 +71,7 @@ async def run_through_proxy(
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
-        "mcp_firewall",
+        "bulwark_mcp",
         "run",
         "--server",
         "cat",

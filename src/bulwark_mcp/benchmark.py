@@ -1,4 +1,4 @@
-"""mcp-firewall benchmark — measure local detection latency.
+"""bulwark benchmark — measure local detection latency.
 
 Runs three workloads on the user's machine and prints p50 / p95 / p99
 plus a one-line tip per outlier:
@@ -6,7 +6,7 @@ plus a one-line tip per outlier:
 1. Rules detector on a benign s2c text (~200 chars).
 2. Inspector cache-hit path (rules short-circuit, classifier cache
    pre-warmed).
-3. End-to-end `python -m mcp_firewall run --server cat` round-trip
+3. End-to-end `python -m bulwark_mcp run --server cat` round-trip
    for a single tool result frame, including audit-log write.
 
 The point isn't to be a synthetic benchmark — it's to give the user a
@@ -127,13 +127,13 @@ async def _bench_inspector_cache_hit(
 
 
 async def _bench_end_to_end(*, iters: int) -> BenchResult:
-    """Spawn `python -m mcp_firewall run --server cat`, send N benign
+    """Spawn `python -m bulwark_mcp run --server cat`, send N benign
     frames on stdin, read N echoes from stdout, time each round-trip."""
-    bench_db = Path(tempfile.gettempdir()) / "mcp-firewall-bench.db"
+    bench_db = Path(tempfile.gettempdir()) / "bulwark-mcp-bench.db"
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
-        "mcp_firewall",
+        "bulwark_mcp",
         "run",
         "--server",
         "cat",
