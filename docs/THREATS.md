@@ -118,3 +118,19 @@ rules:
 ```
 
 Every rule must carry `source` — it is enforced by `tests/test_detectors_rules.py::test_every_rule_has_a_source` so the catalogue cannot drift.
+
+## Recent public PoCs covered
+
+Regression tests: [`tests/test_recent_pocs.py`](../tests/test_recent_pocs.py).
+
+- **Cato CTRL "Living off AI" / Atlassian MCP — June 2025**
+  <https://www.catonetworks.com/blog/cato-ctrl-poc-attack-targeting-atlassians-mcp/>
+  Coverage: `role_hijack.ignore_previous`, `role_hijack.bracketed_role_marker`.
+
+- **Invariantlabs GitHub MCP — May 2025**
+  <https://invariantlabs.ai/blog/mcp-github-vulnerability>
+  Coverage: `role_hijack.ignore_previous`, `role_hijack.bracketed_role_marker`.
+
+### Known limitations
+
+HTML comments with common RAG verbs (`retrieve`, `include`, `reply`) are not flagged. These verbs are too common in legitimate documentation to match safely without context. Deferred to v0.5 (requires context-aware detection). See the `xfail` marked test in [`tests/test_recent_pocs.py`](../tests/test_recent_pocs.py).
