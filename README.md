@@ -12,7 +12,7 @@ Your MCP-enabled agent reads the output of every tool it calls. A file fetched f
 
 `bulwark-mcp` runs on your machine, between the client and the server. It logs every JSON-RPC frame, scans tool results before they reach the agent, and replaces the suspicious ones with a sanitised reply that says "blocked" instead of carrying the payload through.
 
-Architecture lives in the four ADRs under [`docs/adr/`](docs/adr/). The short version: stdio proxy with two pumps, async SQLite writer, three-pass rules detector + optional local LLM classifier, YAML policy engine, all off-by-default until you opt in.
+Architecture lives in the six ADRs under [`docs/adr/`](docs/adr/). The short version: stdio proxy with two pumps, async SQLite writer, three-pass rules detector + optional local LLM classifier, YAML policy engine, all off-by-default until you opt in.
 
 ```
                   ┌──────────────┐    stdio JSON-RPC
@@ -70,9 +70,17 @@ Architecture lives in the four ADRs under [`docs/adr/`](docs/adr/). The short ve
 - 📡 **Opt-in anonymous telemetry** — `BULWARK_TELEMETRY=true` enables a daily payload of version + OS + event counts. **No rule names, no traffic content, no fingerprinting.** Full schema and what we explicitly DON'T send: [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md).
 - 🔌 **Tested MCP integrations** — `github`, `brave-search`, `postgres`. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md). Add yours per the per-server template.
 
+**Week 4 (launch readiness):**
+
+- 🩺 **`bulwark doctor`** — environment diagnostic with four checks (Python version, Ollama reachable + model loaded, audit DB writable at schema v2, rules + policy validate). Exit code reflects worst status.
+- ⏱️ **`bulwark benchmark`** — three workloads (rules detector, inspector cache hit, end-to-end) with p50/p95/p99 output. Run it on your own hardware to compare against the numbers in `docs/PERFORMANCE.md`.
+- 📦 **PyPI distribution** — `pipx install bulwark-mcp` works. CI publishes on tag via OIDC trusted publishing (no token in repo).
+- 🛡️ **Hardening (6 audit findings closed)** — ReDoS guard for community regex, batch JSON-RPC per-id reply synthesis, slowloris protection on `/health`, stats JSON size cap, snapshot caching, cross-script homoglyph fold (Cyrillic/Greek confusables).
+- 🤖 **Launch automation** — 7 GitHub Actions workflows (publish, test-publish, release notes, label sync, auto-label, welcome bot, stale closer), each with opt-out via `vars.BULWARK_MCP_DISABLE_<NAME>`.
+
 ## Quick start
 
-### From PyPI (recommended, once published)
+### From PyPI (recommended)
 
 ```bash
 pipx install bulwark-mcp
@@ -197,7 +205,7 @@ bulwark-mcp/
 │   │   ├── llm.py             # Ollama client + cache + circuit breaker
 │   │   └── rules.py           # YAML rule-pack loader + regex evaluator
 │   └── rules/builtin/         # shipped rule packs (≥24 rules)
-├── tests/                     # pytest, 120+ cases as of Week 2
+├── tests/                     # pytest, 221 cases as of v0.4.2
 ├── docs/
 │   ├── adr/0001-…0004.md      # architecture decision records
 │   ├── PERF.md                # latency budget + measured numbers
@@ -226,11 +234,18 @@ The test suite spawns a real `python -m bulwark_mcp run --server "cat"` subproce
 
 ### How decisions get made
 
-Architecture decisions land as ADRs in `docs/adr/`. Four ADRs ship with Week 2; the next milestones will add:
+Architecture decisions land as ADRs in `docs/adr/`. Six ADRs ship with v0.4.2:
 
-- ADR-0005: HTTP/SSE transport.
-- ADR-0006: async-parallel inspection + Anthropic Haiku tier.
-- ADR-0007: Pro tier — hosted log shipping & threat-feed sync.
+- ADR-0001..0003: stdio proxy, async SQLite writer, audit log schema (Week 1).
+- ADR-0004: detection layer architecture — rules + LLM cascade (Week 2).
+- ADR-0005: observability layer + opt-in telemetry privacy (Week 3).
+- ADR-0006: project rename mcp-firewall → bulwark-mcp (pre-launch name conflict).
+
+Next milestones:
+
+- ADR-0007: HTTP/SSE transport.
+- ADR-0008: async-parallel inspection + Anthropic Haiku fallback tier.
+- ADR-0009: Pro tier — hosted log shipping & threat-feed sync.
 
 ## FAQ
 
@@ -244,15 +259,16 @@ A handful of questions that come up often. The full set lives in [`docs/FAQ.md`]
 
 ## Roadmap
 
-| Milestone | Status | Scope                                                                |
-|-----------|--------|----------------------------------------------------------------------|
-| Week 1    | ✅     | stdio proxy + audit log + CLI viewer                                 |
-| Week 2    | ✅     | Rules + LLM detector, YAML policy engine, sanitised replacements     |
-| Week 3    | ✅     | Community readiness, integration tests, observability, audit-fix v0.3|
-| Week 4    | 🚧     | OSS launch + packaging on PyPI + Claude Desktop integration guide    |
-| Week 5-6  | ⏳     | Community rules repo, HTTP/SSE transport, viewer filters             |
-| Week 7-9  | ⏳     | Pro tier: hosted logs, threat feed, Slack/Discord/Telegram alerts    |
-| Week 10-12| ⏳     | First paying users — pricing & monetisation                          |
+| Milestone   | Status | Scope                                                                       |
+|-------------|--------|-----------------------------------------------------------------------------|
+| Week 1      | ✅     | stdio proxy + audit log + CLI viewer                                        |
+| Week 2      | ✅     | Rules + LLM detector, YAML policy engine, sanitised replacements            |
+| Week 3      | ✅     | Community readiness, integration tests, observability, audit hardening      |
+| Week 4      | ✅     | Launch readiness — PyPI publishing, `doctor`, `benchmark`, 7 CI workflows   |
+| Week 5      | 🚧     | Public OSS launch (HN / Reddit / X) — you're looking at this week           |
+| Week 6-7    | ⏳     | Community rules repo, HTTP/SSE transport, viewer filters                    |
+| Week 8-10   | ⏳     | Pro tier: hosted logs, threat feed, Slack/Discord/Telegram alerts           |
+| Week 11-13  | ⏳     | First paying users — pricing & monetisation                                 |
 
 ## License
 
