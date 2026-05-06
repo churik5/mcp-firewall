@@ -123,6 +123,12 @@ BENIGN_BRACKETED = [
     "Configuration: [DEFAULT] section in config.ini",
     "Markdown link: [click here](https://example.com)",
     "Python list: items = [SYSTEM_PATH, USER_PATH]",
+    # Issue #6 — INST-prefix words must not match the bracketed role
+    # marker now that \b is in place after INST.
+    "Status: [INSTALLED dependencies]",
+    "Config: [INSTANCE_ID=abc123]",
+    "[INSTAGRAM] our latest post",
+    "[INSTANCE] running on port 8080",
 ]
 
 

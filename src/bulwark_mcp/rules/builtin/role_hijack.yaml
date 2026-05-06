@@ -60,7 +60,7 @@ rules:
 
   - id: role_hijack.bracketed_role_marker
     description: "Square-bracket markers imitating chat template boundaries (e.g. [SYSTEM]:, [INST], [NOTE TO AI ASSISTANT:, [END USER MESSAGE])"
-    pattern: '\[\s*SYSTEM\s*\][\s:]|\[\s*INST\s*\]?|\[\s*NOTE\s+TO\s+(AI|MODEL|ASSISTANT|LLM|GPT|CLAUDE)\b|\[\s*END\s+(USER|HUMAN)\s+(MESSAGE|TURN|INPUT|PROMPT)\s*\]|\[\s*ASSISTANT\s*\]\s*:'
+    pattern: '\[\s*SYSTEM\s*\][\s:]|\[\s*INST\b\s*\]?|\[\s*NOTE\s+TO\s+(AI|MODEL|ASSISTANT|LLM|GPT|CLAUDE)\b|\[\s*END\s+(USER|HUMAN)\s+(MESSAGE|TURN|INPUT|PROMPT)\s*\]|\[\s*ASSISTANT\s*\]\s*:'
     score: 0.85
     apply_to: [server_to_client]
     source: "https://www.catonetworks.com/blog/cato-ctrl-poc-attack-targeting-atlassians-mcp/ (Cato CTRL Atlassian PoC, June 2025)"
