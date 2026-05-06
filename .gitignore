@@ -55,3 +55,4 @@ data/*.db-shm
 .env
 config.yaml
 !config.example.yaml
+launch/
