@@ -21,9 +21,9 @@ Architecture lives in the six ADRs under [`docs/adr/`](docs/adr/). The short ver
                   └──────┬───────┘
                          │ launches as a subprocess
                          ▼
-   ┌──────────────────────────────────────────────────┐
+   ┌─────────────────────────────────────────────────┐
    │              bulwark-mcp (proxy)                │
-   │                                                  │
+   │                                                 │
    │   ┌──────────┐    ┌──────────┐    ┌──────────┐  │
    │   │  pump    │───▶│  parse   │───▶│  audit   │  │
    │   │  c2s     │    │  & log   │    │  buffer  │  │
