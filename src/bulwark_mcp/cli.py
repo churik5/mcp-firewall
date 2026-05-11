@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import shlex
 import sys
 from datetime import timedelta
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any
 
 import aiosqlite
 import click
+import httpx
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
@@ -258,6 +260,12 @@ def cmd_detect(
     except FileNotFoundError as exc:
         _console.print(f"[red]error:[/red] {exc}")
         sys.exit(2)
+    except httpx.ConnectError:
+        _print_ollama_unreachable(settings, text=text)
+        sys.exit(2)
+    if _ollama_unreachable(result):
+        _print_ollama_unreachable(settings, text=text)
+        sys.exit(2)
     _print_detection_result(result)
     sys.exit(0 if result.verdict == "PASS" else 1)
 
@@ -344,6 +352,22 @@ def _print_detection_result(result: Any) -> None:
         out.print(f"policy: [yellow]{result.matched_policy}[/yellow] → {result.action}")
     else:
         out.print(f"policy: [dim]no match[/dim] → {result.action}")
+
+
+def _ollama_unreachable(result: Any) -> bool:
+    note = getattr(result, "note", None)
+    return note in {"error:ConnectError", "classifier_error:ConnectError"}
+
+
+def _print_ollama_unreachable(settings: Settings, *, text: str) -> None:
+    ollama_url = settings.detector.ollama_url.rstrip("/") + "/"
+    rules_only = f"bulwark detect {shlex.quote(text)} --no-llm"
+    _console.print(f"[red]Error:[/red] Could not reach Ollama at {ollama_url}.")
+    _console.print("Suggestions:")
+    _console.print("  - Start Ollama:           ollama serve")
+    _console.print(f"  - Or pull the model:      ollama pull {settings.detector.ollama_model}")
+    _console.print(f"  - Or run rules-only:      {rules_only}")
+    _console.print("  - Or run bulwark doctor to diagnose your setup.")
 
 
 def _setup_logging(verbose: int) -> None:
